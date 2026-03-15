@@ -13,6 +13,7 @@ const STATIC_ASSETS = [
     '/js/components/energy-display.js',
     '/js/components/gnss-details.js',
     '/js/components/level-indicator.js',
+    '/js/components/plateau-status.js',
     '/js/components/light-button.js',
     '/js/components/map-display.js',
     '/js/components/nav-bar.js',

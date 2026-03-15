@@ -1,9 +1,11 @@
 // Trailer page - Level indicator
 import { LevelIndicator } from '../components/level-indicator.js';
 import { GnssDetails } from '../components/gnss-details.js';
+import { PlateauStatus } from '../components/plateau-status.js';
 
 let levelIndicator = null;
 let gnssDetails = null;
+let plateauStatus = null;
 
 export const trailerPage = {
     render() {
@@ -16,6 +18,11 @@ export const trailerPage = {
                 <p style="text-align: center; color: var(--text-muted); margin-top: 20px; font-size: 0.875rem;">
                     Green = Level | Yellow = Slight Tilt | Red = Needs Adjustment
                 </p>
+
+                <h1 class="section-title">Plateau Status</h1>
+                <div class="card" id="plateau-status-card">
+                    <!-- Plateau calibration status will be rendered here -->
+                </div>
 
                 <h1 class="section-title">GNSS Details</h1>
                 <div class="card" id="gnss-card">
@@ -31,6 +38,10 @@ export const trailerPage = {
         levelIndicator = new LevelIndicator('level-card');
         document.getElementById('level-card').innerHTML = levelIndicator.render();
         levelIndicator.init();
+
+        plateauStatus = new PlateauStatus('plateau-status-card');
+        document.getElementById('plateau-status-card').innerHTML = plateauStatus.render();
+        plateauStatus.init();
 
         try {
             gnssDetails = new GnssDetails('gnss-card');
@@ -51,6 +62,10 @@ export const trailerPage = {
         if (levelIndicator) {
             levelIndicator.cleanup();
             levelIndicator = null;
+        }
+        if (plateauStatus) {
+            plateauStatus.cleanup();
+            plateauStatus = null;
         }
         if (gnssDetails) {
             gnssDetails.cleanup();

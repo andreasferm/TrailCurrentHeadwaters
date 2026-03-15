@@ -120,11 +120,12 @@
             { "t": "eq", "v": "0x024", "vt": "str" },
             { "t": "eq", "v": "0x02c", "vt": "str" },
             { "t": "eq", "v": "0x028", "vt": "str" },
-            { "t": "eq", "v": "0x030", "vt": "str" }
+            { "t": "eq", "v": "0x030", "vt": "str" },
+            { "t": "eq", "v": "0x032", "vt": "str" }
         ],
         "checkall": "true",
         "repair": false,
-        "outputs": 11,
+        "outputs": 12,
         "x": 880,
         "y": 640,
         "wires": [
@@ -167,6 +168,9 @@
             ],
             [
                 "plateau_tilt_parse"
+            ],
+            [
+                "plateau_status_parse"
             ]
         ]
     },
@@ -2813,6 +2817,40 @@
         "broker": "116a81d49537d25e",
         "x": 600,
         "y": 1980,
+        "wires": []
+    },
+    {
+        "id": "plateau_status_parse",
+        "type": "function",
+        "z": "starter_flow_tab_01",
+        "name": "PlateauStatusParse",
+        "func": "let decoded = msg.payload.data.map(bitArray =>\n    Number.parseInt(bitArray.join(''), 2)\n);\n\nlet flags = decoded[0];\nlet calPacked = decoded[1];\nlet mounting = decoded[2];\n\nmsg.payload = {\n    imu_connected: (flags & 0x01) !== 0,\n    fully_calibrated: (flags & 0x02) !== 0,\n    cal_sys: (calPacked >> 6) & 0x03,\n    cal_gyro: (calPacked >> 4) & 0x03,\n    cal_accel: (calPacked >> 2) & 0x03,\n    cal_mag: calPacked & 0x03,\n    mounting: mounting\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 2040,
+        "wires": [["plateau_status_mqtt_out"]]
+    },
+    {
+        "id": "plateau_status_mqtt_out",
+        "type": "mqtt out",
+        "z": "starter_flow_tab_01",
+        "name": "Publish Level Status",
+        "topic": "local/level/status",
+        "qos": "0",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "application/json",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "116a81d49537d25e",
+        "x": 600,
+        "y": 2040,
         "wires": []
     }
 ]

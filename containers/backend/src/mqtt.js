@@ -34,6 +34,7 @@ const TOPICS = {
     GPS_TIME: `${MQTT_ROOT}/${MQTT_GPS}/time`,
     RELAY_STATUS: `${MQTT_ROOT}/${MQTT_RELAYS}/+/${MSG_STATUS}`,
     LEVEL_TILT: `${MQTT_ROOT}/${MQTT_LEVEL}/tilt`,
+    LEVEL_STATUS: `${MQTT_ROOT}/${MQTT_LEVEL}/${MSG_STATUS}`,
     CLOUD_CONFIG_CHANGED: 'local/config/cloud_updated'
 };
 
@@ -183,6 +184,15 @@ class MqttService {
             }
         });
 
+        // Subscribe to Plateau level status topic (calibration + IMU state)
+        this.client.subscribe(TOPICS.LEVEL_STATUS, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to level status:', err);
+            } else {
+                console.log('Subscribed to level status topic');
+            }
+        });
+
         // Subscribe to GPS time topic
         this.client.subscribe(TOPICS.GPS_TIME, (err) => {
             if (err) {
@@ -235,6 +245,8 @@ class MqttService {
                 this.handleThermostatStatus(payload);
             } else if (parts[1] === MQTT_LEVEL && parts[2] === 'tilt') {
                 this.handleLevelTilt(payload);
+            } else if (parts[1] === MQTT_LEVEL && parts[2] === MSG_STATUS) {
+                this.handleLevelStatus(payload);
             }
         } catch (error) {
             console.error('Error handling MQTT message:', error);
@@ -412,6 +424,14 @@ class MqttService {
     handleLevelTilt(payload) {
         if (this.broadcast) {
             this.broadcast('level', payload);
+        }
+    }
+
+    // Handle Plateau status data (CAN ID 0x32 decoded by Node-RED)
+    // Payload: { imu_connected, fully_calibrated, cal_sys, cal_gyro, cal_accel, cal_mag, mounting }
+    handleLevelStatus(payload) {
+        if (this.broadcast) {
+            this.broadcast('level_status', payload);
         }
     }
 
