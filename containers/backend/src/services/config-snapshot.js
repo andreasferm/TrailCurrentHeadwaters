@@ -35,13 +35,17 @@ async function buildConfigSnapshot(db) {
         config: sanitizeModuleConfig(m.config)
     }));
 
-    const channels = lights.map(l => ({
-        id: l._id,
-        name: l.name,
-        icon: l.icon,
-        type: l.type,
-        source: l.source || 'pdm'
-    }));
+    const channels = lights.map(l => {
+        const ch = {
+            id: l._id,
+            name: l.name,
+            icon: l.icon,
+            type: l.type,
+            source: l.source || 'pdm'
+        };
+        if (l.relay_channel !== undefined) ch.relay_channel = l.relay_channel;
+        return ch;
+    });
 
     return {
         wizard_completed: systemConfig.wizard_completed || false,
