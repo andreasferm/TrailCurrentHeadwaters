@@ -4,6 +4,7 @@ const { encrypt, decrypt } = require('../utils/crypto.js');
 const { injectWithRetry, removeWithRetry } = require('../services/nodered-cloud-workflow.js');
 const { syncPdmChannelsToLights } = require('../services/pdm-channel-sync.js');
 const { syncSwitchbackChannelsToLights } = require('../services/switchback-channel-sync.js');
+const { buildConfigSnapshot } = require('../services/config-snapshot.js');
 
 module.exports = (db) => {
     const systemConfig = db.collection('system_config');
@@ -294,6 +295,20 @@ module.exports = (db) => {
                 } catch (error) {
                     console.error('[System Config] Error syncing device channels:', error);
                 }
+            }
+
+            // Publish full config snapshot to cloud if enabled
+            try {
+                const currentConfig = await systemConfig.findOne({ _id: 'main' });
+                if (currentConfig && currentConfig.cloud_enabled) {
+                    const mqttService = require('../mqtt');
+                    const snapshot = await buildConfigSnapshot(db);
+                    if (snapshot) {
+                        mqttService.publishSystemConfigSnapshot(snapshot);
+                    }
+                }
+            } catch (error) {
+                console.error('[System Config] Error publishing config snapshot:', error);
             }
 
             const data = await systemConfig.findOne({ _id: 'main' });

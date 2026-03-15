@@ -116,11 +116,22 @@ async function startServer() {
         syncPdmChannelsToLights(db, mqttService).catch(err =>
             console.error('[Startup] PDM channel sync failed:', err.message));
 
-        // Sync Switchback relay configs to lights collection, then cache names for MQTT hot path
+        // Sync Switchback relay configs to lights collection, then cache names for MQTT hot path,
+        // then publish config snapshot to cloud if enabled
         const { syncSwitchbackChannelsToLights } = require('./services/switchback-channel-sync');
         syncSwitchbackChannelsToLights(db, mqttService)
             .then(() => mqttService.refreshRelayNameCache())
-            .catch(err => console.error('[Startup] Switchback channel sync failed:', err.message));
+            .then(async () => {
+                if (sysConfig && sysConfig.cloud_enabled) {
+                    const { buildConfigSnapshot } = require('./services/config-snapshot');
+                    const snapshot = await buildConfigSnapshot(db);
+                    if (snapshot) {
+                        mqttService.publishSystemConfigSnapshot(snapshot);
+                        console.log('[Startup] Published config snapshot for cloud sync');
+                    }
+                }
+            })
+            .catch(err => console.error('[Startup] Switchback sync/config snapshot failed:', err.message));
 
         // Start server
         server.listen(PORT, '0.0.0.0', () => {

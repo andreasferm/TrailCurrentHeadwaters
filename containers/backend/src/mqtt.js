@@ -35,7 +35,9 @@ const TOPICS = {
     RELAY_STATUS: `${MQTT_ROOT}/${MQTT_RELAYS}/+/${MSG_STATUS}`,
     LEVEL_TILT: `${MQTT_ROOT}/${MQTT_LEVEL}/tilt`,
     LEVEL_STATUS: `${MQTT_ROOT}/${MQTT_LEVEL}/${MSG_STATUS}`,
-    CLOUD_CONFIG_CHANGED: 'local/config/cloud_updated'
+    CLOUD_CONFIG_CHANGED: 'local/config/cloud_updated',
+    SYSTEM_CONFIG_SYNC: 'local/config/system_sync',
+    SYSTEM_CONFIG_SYNC_TRIGGER: 'local/config/system_sync_trigger'
 };
 
 class MqttService {
@@ -201,6 +203,15 @@ class MqttService {
                 console.log('Subscribed to GPS time topic');
             }
         });
+
+        // Subscribe to config sync trigger (cloud reconnect re-publish)
+        this.client.subscribe(TOPICS.SYSTEM_CONFIG_SYNC_TRIGGER, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to config sync trigger:', err);
+            } else {
+                console.log('Subscribed to config sync trigger topic');
+            }
+        });
     }
 
     handleMessage(topic, message) {
@@ -247,6 +258,8 @@ class MqttService {
                 this.handleLevelTilt(payload);
             } else if (parts[1] === MQTT_LEVEL && parts[2] === MSG_STATUS) {
                 this.handleLevelStatus(payload);
+            } else if (parts[1] === 'config' && parts[2] === 'system_sync_trigger') {
+                this.handleConfigSyncTrigger();
             }
         } catch (error) {
             console.error('Error handling MQTT message:', error);
@@ -644,6 +657,23 @@ class MqttService {
         return this.publishCanMessage(0x20, dataBytes);
     }
 
+    // Handle cloud reconnect trigger — re-publish config snapshot
+    async handleConfigSyncTrigger() {
+        try {
+            const { buildConfigSnapshot } = require('./services/config-snapshot');
+            const systemConfig = await this.db.collection('system_config').findOne({ _id: 'main' });
+            if (systemConfig && systemConfig.cloud_enabled) {
+                const snapshot = await buildConfigSnapshot(this.db);
+                if (snapshot) {
+                    this.publishSystemConfigSnapshot(snapshot);
+                    console.log('[Config Sync] Re-published config snapshot (cloud reconnect trigger)');
+                }
+            }
+        } catch (err) {
+            console.error('[Config Sync] Failed to re-publish config snapshot:', err.message);
+        }
+    }
+
     // Publish PDM channel configuration for cloud sync
     publishPdmChannelConfig(channels) {
         if (!this.connected) {
@@ -683,6 +713,19 @@ class MqttService {
         const payload = { timestamp: new Date().toISOString() };
         console.log(`Publishing cloud config changed to ${topic}`);
         this.client.publish(topic, JSON.stringify(payload), { qos: 1 });
+        return true;
+    }
+
+    // Publish full system config snapshot for cloud sync (retained)
+    publishSystemConfigSnapshot(snapshot) {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish system config snapshot');
+            return false;
+        }
+
+        const topic = TOPICS.SYSTEM_CONFIG_SYNC;
+        console.log(`Publishing system config snapshot to ${topic}`);
+        this.client.publish(topic, JSON.stringify(snapshot), { qos: 1, retain: true });
         return true;
     }
 

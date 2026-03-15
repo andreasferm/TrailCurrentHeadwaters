@@ -226,7 +226,7 @@ class App {
                         <circle cx="18" cy="18" r="2"></circle>
                         <line x1="6" y1="12" x2="18" y2="12"></line>
                     </svg>
-                    <span>Trailer</span>
+                    <span>Vehicle</span>
                 </button>
                 <button class="nav-btn" data-page="energy">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
