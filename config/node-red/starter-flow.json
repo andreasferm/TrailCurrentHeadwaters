@@ -4,7 +4,7 @@
         "type": "tab",
         "label": "CAN Bus Bridge",
         "disabled": false,
-        "info": "Version: 4\n\nBridges CAN bus messages to local MQTT topics for the TrailCurrent PWA.\n\nINBOUND: Subscribes to can/inbound, routes by CAN identifier, parses data,\nand publishes to local/* topics (lights, relays, air quality, GPS).\n\nOUTBOUND: Subscribes to local/lights/*/command and local/relays/*/command\nfrom the PWA and sends CAN toggle/brightness messages to can/outbound.\n\nSETUP:\n1. Double-click any MQTT node, then click the pencil icon next to 'Local MQTT Broker'\n2. Go to the Security tab and enter your MQTT username and password (from .env file)\n3. Click Update, then click Deploy (red button, top right)",
+        "info": "Version: __APP_VERSION__\n\nBridges CAN bus messages to local MQTT topics for the TrailCurrent PWA.\n\nINBOUND: Subscribes to can/inbound, routes by CAN identifier, parses data,\nand publishes to local/* topics (lights, relays, air quality, GPS).\n\nOUTBOUND: Subscribes to local/lights/*/command and local/relays/*/command\nfrom the PWA and sends CAN toggle/brightness messages to can/outbound.\n\nSETUP:\n1. Double-click any MQTT node, then click the pencil icon next to 'Local MQTT Broker'\n2. Go to the Security tab and enter your MQTT username and password (from .env file)\n3. Click Update, then click Deploy (red button, top right)",
         "env": []
     },
     {
@@ -119,11 +119,12 @@
             { "t": "eq", "v": "0x023", "vt": "str" },
             { "t": "eq", "v": "0x024", "vt": "str" },
             { "t": "eq", "v": "0x02c", "vt": "str" },
-            { "t": "eq", "v": "0x028", "vt": "str" }
+            { "t": "eq", "v": "0x028", "vt": "str" },
+            { "t": "eq", "v": "0x030", "vt": "str" }
         ],
         "checkall": "true",
         "repair": false,
-        "outputs": 10,
+        "outputs": 11,
         "x": 880,
         "y": 640,
         "wires": [
@@ -163,6 +164,9 @@
             ],
             [
                 "relay_status_parse"
+            ],
+            [
+                "plateau_tilt_parse"
             ]
         ]
     },
@@ -2776,5 +2780,39 @@
         "x": 340,
         "y": 1920,
         "wires": [["a18c8e9eefccbfb9"]]
+    },
+    {
+        "id": "plateau_tilt_parse",
+        "type": "function",
+        "z": "starter_flow_tab_01",
+        "name": "PlateauTiltParse",
+        "func": "let decoded = msg.payload.data.map(bitArray =>\n    Number.parseInt(bitArray.join(''), 2)\n);\n\n// Bytes 0-1: PitchScaled (int16 BE, scale 0.01 = degrees)\nlet pitch = (decoded[0] << 8) | decoded[1];\nif (pitch >= 0x8000) pitch -= 0x10000;\n\n// Bytes 2-3: RollScaled (int16 BE, scale 0.01 = degrees)\nlet roll = (decoded[2] << 8) | decoded[3];\nif (roll >= 0x8000) roll -= 0x10000;\n\n// Bytes 4-5: FrontBackDiffMm (int16 BE, mm)\nlet fbDiff = (decoded[4] << 8) | decoded[5];\nif (fbDiff >= 0x8000) fbDiff -= 0x10000;\n\n// Bytes 6-7: LeftRightDiffMm (int16 BE, mm)\nlet lrDiff = (decoded[6] << 8) | decoded[7];\nif (lrDiff >= 0x8000) lrDiff -= 0x10000;\n\nmsg.payload = {\n    front_back: pitch * 0.01,\n    side_to_side: roll * 0.01,\n    front_back_diff_mm: fbDiff,\n    left_right_diff_mm: lrDiff\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 1980,
+        "wires": [["plateau_tilt_mqtt_out"]]
+    },
+    {
+        "id": "plateau_tilt_mqtt_out",
+        "type": "mqtt out",
+        "z": "starter_flow_tab_01",
+        "name": "Publish Level Tilt",
+        "topic": "local/level/tilt",
+        "qos": "0",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "application/json",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "116a81d49537d25e",
+        "x": 600,
+        "y": 1980,
+        "wires": []
     }
 ]

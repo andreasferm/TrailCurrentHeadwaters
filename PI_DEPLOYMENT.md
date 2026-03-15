@@ -19,7 +19,7 @@ The deployment zip is created on your development machine using:
 This produces `trailcurrent-deployment-1.0.0.zip` containing:
 - `images/*.tar` — 7 pre-built ARM64 Docker images (including MongoDB)
 - `docker-compose.yml` — Service orchestration
-- `config/` — Mosquitto and Node-RED configuration
+- `config/` — Mosquitto and Node-RED configuration (starter flow version auto-injected from `--version`)
 - `local_code/` — Python CAN-to-MQTT bridge and OTA helpers
 - `firmware/wired/` — MCU firmware binaries (if available)
 - `scripts/` — SSL certificate generation
@@ -156,7 +156,8 @@ When deploying a new version:
    - Stop existing services
    - Update the system CA trust store if certificates were renewed
    - Load updated Docker images
-   - Preserve your `.env`, certificates, map tiles, and Node-RED flows
+   - Preserve your `.env`, certificates, map tiles, and Node-RED user flows
+   - Auto-update the CAN Bus Bridge starter flow in Node-RED (version compared on backend startup)
    - Restart all services
    - Restart the deployment watcher service
    - Update MCU firmware if new firmware is included
@@ -179,7 +180,7 @@ These items are **PRESERVED** and never deleted by `deploy.sh`:
 
 ### Data
 - `data/tileserver/map.mbtiles` — Map tile database (~25GB)
-- `data/node-red/` — User-created Node-RED flows and credentials
+- `data/node-red/` — Node-RED runtime data and credentials (the CAN Bus Bridge starter flow is auto-updated by the backend when a newer version is deployed; user-created flows are preserved)
 - MongoDB data volume — All application state
 
 **CRITICAL: Never delete `data/` directory during updates!**

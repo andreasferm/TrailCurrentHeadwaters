@@ -5,13 +5,13 @@ export class LevelIndicator {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
         this.data = {
-            front_back: 0,
-            side_to_side: 0,
+            front_back: null,
+            side_to_side: null,
+            front_back_diff_mm: null,
+            left_right_diff_mm: null,
         };
         this.wsHandler = null;
-        // Trailer dimensions for inches calculation (in inches)
-        this.trailerLength = 300; // 25 feet
-        this.trailerWidth = 96;   // 8 feet
+        this.unsubStale = null;
     }
 
     render() {
@@ -24,7 +24,7 @@ export class LevelIndicator {
                     </div>
                     <div class="level-values">
                         <span class="level-value" id="fb-value">${this.formatDegrees(this.data.front_back)}</span>
-                        <span class="level-inches" id="fb-inches">${this.formatInches(this.data.front_back, this.trailerLength)}</span>
+                        <span class="level-inches" id="fb-inches">${this.formatInches(this.data.front_back_diff_mm)}</span>
                     </div>
                 </div>
                 <div class="level-indicator">
@@ -34,7 +34,7 @@ export class LevelIndicator {
                     </div>
                     <div class="level-values">
                         <span class="level-value" id="ss-value">${this.formatDegrees(this.data.side_to_side)}</span>
-                        <span class="level-inches" id="ss-inches">${this.formatInches(this.data.side_to_side, this.trailerWidth)}</span>
+                        <span class="level-inches" id="ss-inches">${this.formatInches(this.data.left_right_diff_mm)}</span>
                     </div>
                 </div>
             </div>
@@ -42,27 +42,38 @@ export class LevelIndicator {
     }
 
     formatDegrees(value) {
+        if (value == null) return '-';
         const sign = value > 0 ? '+' : '';
         return `${sign}${value.toFixed(1)}°`;
     }
 
-    formatInches(degrees, length) {
-        // Calculate rise at end: tan(angle) * (length/2)
-        const radians = Math.abs(degrees) * (Math.PI / 180);
-        const inches = Math.tan(radians) * (length / 2);
-        const sign = degrees > 0 ? '+' : degrees < 0 ? '-' : '';
+    formatInches(diffMm) {
+        if (diffMm == null) return '-';
+        const inches = Math.abs(diffMm) / 25.4;
+        const sign = diffMm > 0 ? '+' : diffMm < 0 ? '-' : '';
         return `${sign}${inches.toFixed(1)}"`;
     }
 
     getStatusClass(value) {
+        if (value == null) return '';
         const absValue = Math.abs(value);
         if (absValue > 5) return 'danger';
         if (absValue > 2) return 'warning';
         return '';
     }
 
+    markStale() {
+        this.data = {
+            front_back: null,
+            side_to_side: null,
+            front_back_diff_mm: null,
+            left_right_diff_mm: null,
+        };
+        this.updateDisplay();
+    }
+
     init(data) {
-        this.data = { ...this.data, ...data };
+        if (data) this.data = { ...this.data, ...data };
         this.updateDisplay();
 
         // Setup WebSocket listener
@@ -71,6 +82,8 @@ export class LevelIndicator {
             this.updateDisplay();
         };
         wsClient.on('level', this.wsHandler);
+
+        this.unsubStale = wsClient.onStale('level', () => this.markStale());
     }
 
     updateDisplay() {
@@ -82,17 +95,24 @@ export class LevelIndicator {
         const ssInches = document.getElementById('ss-inches');
 
         if (fbFill) {
-            // Calculate position: -15 to +15 degrees maps to 0-100% offset
-            const fbOffset = (this.data.front_back / 15) * 40; // Max 40% offset from center
-            fbFill.style.transform = `translate(calc(-50% + ${fbOffset}%), -50%)`;
+            if (this.data.front_back != null) {
+                const fbOffset = (this.data.front_back / 15) * 40;
+                fbFill.style.transform = `translate(calc(-50% + ${fbOffset}%), -50%)`;
+            } else {
+                fbFill.style.transform = 'translate(-50%, -50%)';
+            }
 
             const fbStatus = this.getStatusClass(this.data.front_back);
             fbFill.className = `level-bubble-fill ${fbStatus}`;
         }
 
         if (ssFill) {
-            const ssOffset = (this.data.side_to_side / 15) * 40;
-            ssFill.style.transform = `translate(calc(-50% + ${ssOffset}%), -50%)`;
+            if (this.data.side_to_side != null) {
+                const ssOffset = (this.data.side_to_side / 15) * 40;
+                ssFill.style.transform = `translate(calc(-50% + ${ssOffset}%), -50%)`;
+            } else {
+                ssFill.style.transform = 'translate(-50%, -50%)';
+            }
 
             const ssStatus = this.getStatusClass(this.data.side_to_side);
             ssFill.className = `level-bubble-fill ${ssStatus}`;
@@ -109,12 +129,12 @@ export class LevelIndicator {
         }
 
         if (fbInches) {
-            fbInches.textContent = this.formatInches(this.data.front_back, this.trailerLength);
+            fbInches.textContent = this.formatInches(this.data.front_back_diff_mm);
             fbInches.className = `level-inches ${this.getStatusClass(this.data.front_back)}`;
         }
 
         if (ssInches) {
-            ssInches.textContent = this.formatInches(this.data.side_to_side, this.trailerWidth);
+            ssInches.textContent = this.formatInches(this.data.left_right_diff_mm);
             ssInches.className = `level-inches ${this.getStatusClass(this.data.side_to_side)}`;
         }
     }
@@ -122,6 +142,9 @@ export class LevelIndicator {
     cleanup() {
         if (this.wsHandler) {
             wsClient.off('level', this.wsHandler);
+        }
+        if (this.unsubStale) {
+            this.unsubStale();
         }
     }
 }

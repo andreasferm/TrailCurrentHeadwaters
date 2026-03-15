@@ -1,5 +1,4 @@
 // Trailer page - Level indicator
-import { API } from '../api.js';
 import { LevelIndicator } from '../components/level-indicator.js';
 import { GnssDetails } from '../components/gnss-details.js';
 
@@ -26,16 +25,13 @@ export const trailerPage = {
         `;
     },
 
-    async init() {
-        try {
-            const levelData = await API.getTrailerLevel();
-            levelIndicator = new LevelIndicator('level-card');
-            document.getElementById('level-card').innerHTML = levelIndicator.render();
-            levelIndicator.init(levelData);
-        } catch (error) {
-            console.error('Failed to fetch level data:', error);
-            document.getElementById('level-card').innerHTML = '<p style="color: var(--danger);">Failed to load level data</p>';
-        }
+    init() {
+        // Level data arrives via WebSocket from Plateau CAN bus — no API fetch needed.
+        // Shows "-" until first real data arrives.
+        levelIndicator = new LevelIndicator('level-card');
+        document.getElementById('level-card').innerHTML = levelIndicator.render();
+        levelIndicator.init();
+
         try {
             gnssDetails = new GnssDetails('gnss-card');
             document.getElementById('gnss-card').innerHTML = gnssDetails.render();

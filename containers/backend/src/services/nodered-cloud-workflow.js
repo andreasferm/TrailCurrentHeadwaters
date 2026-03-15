@@ -218,13 +218,28 @@ async function removeWithRetry(retries = 3) {
 }
 
 /**
- * Extract the version number from a starter flow tab's info field.
- * Expects "Version: N" as the first line of the info string.
+ * Extract the version string from a starter flow tab's info field.
+ * Expects "Version: x.y.z" as the first line of the info string.
  */
 function getFlowVersion(flowTab) {
-    if (!flowTab || !flowTab.info) return 0;
-    const match = flowTab.info.match(/^Version:\s*(\d+)/);
-    return match ? parseInt(match[1], 10) : 0;
+    if (!flowTab || !flowTab.info) return '0.0.0';
+    const match = flowTab.info.match(/^Version:\s*([\d.]+)/);
+    return match ? match[1] : '0.0.0';
+}
+
+/**
+ * Compare two semver strings. Returns true if `a` is newer than `b`.
+ */
+function isNewerVersion(a, b) {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const va = pa[i] || 0;
+        const vb = pb[i] || 0;
+        if (va > vb) return true;
+        if (va < vb) return false;
+    }
+    return false;
 }
 
 /**
@@ -251,7 +266,7 @@ async function injectStarterFlowIfEmpty(retries = 5) {
 
             if (existingTab) {
                 const existingVersion = getFlowVersion(existingTab);
-                if (existingVersion >= templateVersion) {
+                if (!isNewerVersion(templateVersion, existingVersion)) {
                     console.log(`[Starter Flow] Up to date (version ${existingVersion})`);
                     return true;
                 }

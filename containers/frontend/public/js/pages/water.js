@@ -1,5 +1,4 @@
 // Water page - Tank level monitoring
-import { API } from '../api.js';
 import { WaterTanks } from '../components/water-tanks.js';
 
 let waterTanks = null;
@@ -21,16 +20,12 @@ export const waterPage = {
         `;
     },
 
-    async init() {
-        try {
-            const waterData = await API.getWater();
-            waterTanks = new WaterTanks('water-container');
-            document.getElementById('water-container').innerHTML = waterTanks.render();
-            waterTanks.init(waterData);
-        } catch (error) {
-            console.error('Failed to fetch water data:', error);
-            document.getElementById('water-container').innerHTML = '<p style="color: var(--danger);">Failed to load water data</p>';
-        }
+    init() {
+        // Water tank data arrives via WebSocket from CAN bus — no API fetch needed.
+        // Shows "-" until first real data arrives.
+        waterTanks = new WaterTanks('water-container');
+        document.getElementById('water-container').innerHTML = waterTanks.render();
+        waterTanks.init();
     },
 
     cleanup() {

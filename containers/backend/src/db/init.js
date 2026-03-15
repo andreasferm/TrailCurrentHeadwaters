@@ -62,55 +62,6 @@ async function seedDatabase() {
         }
     }
 
-    // Seed trailer level
-    const trailerLevel = db.collection('trailer_level');
-    const existingLevel = await trailerLevel.findOne({ _id: 'main' });
-    if (!existingLevel) {
-        await trailerLevel.insertOne({
-            _id: 'main',
-            front_back: 0.0,
-            side_to_side: 0.0,
-            updated_at: new Date()
-        });
-        console.log('Seeded trailer level');
-    }
-
-    // Seed energy
-    const energy = db.collection('energy');
-    const existingEnergy = await energy.findOne({ _id: 'main' });
-    if (!existingEnergy) {
-        await energy.insertOne({
-            _id: 'main',
-            solar_watts: 245.0,
-            battery_percent: 87,
-            battery_voltage: 13.2,
-            charge_type: 'float',
-            time_remaining_minutes: 2880, // 48 hours
-            consumption_watts: 0,
-            updated_at: new Date()
-        });
-        console.log('Seeded energy');
-    } else {
-        // Migration: add missing fields
-        const updates = {};
-        if (existingEnergy.time_remaining_minutes === undefined) {
-            updates.time_remaining_minutes = 2880;
-        }
-        if (existingEnergy.battery_voltage === undefined) {
-            updates.battery_voltage = 13.2;
-        }
-        if (existingEnergy.consumption_watts === undefined) {
-            updates.consumption_watts = 0;
-        }
-        if (Object.keys(updates).length > 0) {
-            await energy.updateOne(
-                { _id: 'main' },
-                { $set: updates }
-            );
-            console.log('Migrated energy fields:', Object.keys(updates).join(', '));
-        }
-    }
-
     // Seed settings
     const settings = db.collection('settings');
     const existingSettings = await settings.findOne({ _id: 'main' });
@@ -183,33 +134,6 @@ async function seedDatabase() {
             );
             console.log('Migrated system configuration fields:', Object.keys(updates).join(', '));
         }
-    }
-
-    // Seed water tanks
-    const water = db.collection('water');
-    const existingWater = await water.findOne({ _id: 'main' });
-    if (!existingWater) {
-        await water.insertOne({
-            _id: 'main',
-            fresh: 75.0,
-            grey: 30.0,
-            black: 15.0,
-            updated_at: new Date()
-        });
-        console.log('Seeded water tanks');
-    }
-
-    // Seed air quality
-    const airquality = db.collection('airquality');
-    const existingAirQuality = await airquality.findOne({ _id: 'main' });
-    if (!existingAirQuality) {
-        await airquality.insertOne({
-            _id: 'main',
-            tvoc_ppb: 50,
-            eco2_ppm: 450,
-            updated_at: new Date()
-        });
-        console.log('Seeded air quality');
     }
 
     console.log('Database seeding complete');

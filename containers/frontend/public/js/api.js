@@ -199,26 +199,6 @@ class API {
         });
     }
 
-    // Trailer
-    static async getTrailerLevel() {
-        return this.request('/trailer/level');
-    }
-
-    // Energy
-    static async getEnergy() {
-        return this.request('/energy');
-    }
-
-    // Water tanks
-    static async getWater() {
-        return this.request('/water');
-    }
-
-    // Air quality
-    static async getAirQuality() {
-        return this.request('/airquality');
-    }
-
     // Settings
     static async getSettings() {
         return this.request('/settings');

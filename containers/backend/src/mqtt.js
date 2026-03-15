@@ -11,6 +11,7 @@ const MQTT_ENERGY = 'energy';
 const MQTT_AIRQUALITY = 'airquality';
 const MQTT_GPS = 'gps';
 const MQTT_RELAYS = 'relays';
+const MQTT_LEVEL = 'level';
 
 // MQTT Message Types
 const MSG_COMMAND = 'command';
@@ -32,6 +33,7 @@ const TOPICS = {
     GPS_GNSS_DETAILS: `${MQTT_ROOT}/${MQTT_GPS}/details`,
     GPS_TIME: `${MQTT_ROOT}/${MQTT_GPS}/time`,
     RELAY_STATUS: `${MQTT_ROOT}/${MQTT_RELAYS}/+/${MSG_STATUS}`,
+    LEVEL_TILT: `${MQTT_ROOT}/${MQTT_LEVEL}/tilt`,
     CLOUD_CONFIG_CHANGED: 'local/config/cloud_updated'
 };
 
@@ -172,6 +174,15 @@ class MqttService {
             }
         });
 
+        // Subscribe to Plateau level tilt topic
+        this.client.subscribe(TOPICS.LEVEL_TILT, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to level tilt:', err);
+            } else {
+                console.log('Subscribed to level tilt topic');
+            }
+        });
+
         // Subscribe to GPS time topic
         this.client.subscribe(TOPICS.GPS_TIME, (err) => {
             if (err) {
@@ -222,6 +233,8 @@ class MqttService {
                 this.handleGpsTime(payload);
             } else if (parts[1] === MQTT_THERMOSTAT && parts[2] === MSG_STATUS) {
                 this.handleThermostatStatus(payload);
+            } else if (parts[1] === MQTT_LEVEL && parts[2] === 'tilt') {
+                this.handleLevelTilt(payload);
             }
         } catch (error) {
             console.error('Error handling MQTT message:', error);
@@ -305,54 +318,10 @@ class MqttService {
         return true;
     }
 
-    // Handle energy status update from battery monitor
-    async handleEnergyStatus(payload) {
-        console.log('Received energy status:', payload);
-
-        if (this.db) {
-            try {
-                const updates = { updated_at: new Date() };
-
-                if (payload.solar_watts !== undefined) {
-                    updates.solar_watts = payload.solar_watts;
-                }
-
-                if (payload.battery_percent !== undefined) {
-                    updates.battery_percent = payload.battery_percent;
-                }
-
-                if (payload.battery_voltage !== undefined) {
-                    updates.battery_voltage = payload.battery_voltage;
-                }
-
-                if (payload.charge_type !== undefined) {
-                    updates.charge_type = payload.charge_type;
-                }
-
-                if (payload.time_remaining_minutes !== undefined) {
-                    updates.time_remaining_minutes = payload.time_remaining_minutes;
-                }
-
-                if (payload.consumption_watts !== undefined) {
-                    updates.consumption_watts = payload.consumption_watts;
-                }
-
-                if (Object.keys(updates).length > 1) {
-                    const energy = this.db.collection('energy');
-                    await energy.updateOne(
-                        { _id: 'main' },
-                        { $set: updates }
-                    );
-
-                    // Get updated energy data and broadcast via WebSocket
-                    const data = await energy.findOne({ _id: 'main' });
-                    if (data && this.broadcast) {
-                        this.broadcast('energy', data);
-                    }
-                }
-            } catch (error) {
-                console.error('Error updating energy in database:', error);
-            }
+    // Handle energy status update from battery monitor — passthrough to WebSocket
+    handleEnergyStatus(payload) {
+        if (this.broadcast) {
+            this.broadcast('energy', payload);
         }
     }
 
@@ -361,39 +330,10 @@ class MqttService {
         this.broadcast('temphumid', payload);
     }
 
-    // Handle air quality status update from sensor (SGP30: TVOC + eCO2)
-    async handleAirQualityStatus(payload) {
-        console.log('Received air quality status:', payload);
-
-        if (this.db) {
-            try {
-                const updates = { updated_at: new Date() };
-
-                if (payload.tvoc_ppb !== undefined) {
-                    updates.tvoc_ppb = payload.tvoc_ppb;
-                }
-
-                if (payload.eco2_ppm !== undefined) {
-                    updates.eco2_ppm = payload.eco2_ppm;
-                }
-
-                if (Object.keys(updates).length > 1) {
-                    const airquality = this.db.collection('airquality');
-                    await airquality.updateOne(
-                        { _id: 'main' },
-                        { $set: updates },
-                        { upsert: true }
-                    );
-
-                    // Get updated air quality data and broadcast via WebSocket
-                    const data = await airquality.findOne({ _id: 'main' });
-                    if (data && this.broadcast) {
-                        this.broadcast('airquality', data);
-                    }
-                }
-            } catch (error) {
-                console.error('Error updating air quality in database:', error);
-            }
+    // Handle air quality status update from sensor (SGP30: TVOC + eCO2) — passthrough to WebSocket
+    handleAirQualityStatus(payload) {
+        if (this.broadcast) {
+            this.broadcast('airquality', payload);
         }
     }
 
@@ -464,6 +404,14 @@ class MqttService {
                 target_temp: payload.target_temp,
                 mode: payload.mode
             });
+        }
+    }
+
+    // Handle Plateau tilt data (CAN ID 0x30 decoded by Node-RED)
+    // Payload: { front_back, side_to_side, front_back_diff_mm, left_right_diff_mm }
+    handleLevelTilt(payload) {
+        if (this.broadcast) {
+            this.broadcast('level', payload);
         }
     }
 

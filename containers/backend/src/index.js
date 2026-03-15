@@ -56,11 +56,11 @@ async function startServer() {
         // API Routes (protected)
         app.use('/api/thermostat', thermostatRoutes(db));
         app.use('/api/lights', lightsRoutes(db));
-        app.use('/api/trailer', trailerRoutes(db));
-        app.use('/api/energy', energyRoutes(db));
+        app.use('/api/trailer', trailerRoutes());
+        app.use('/api/energy', energyRoutes());
         app.use('/api/settings', settingsRoutes(db));
-        app.use('/api/water', waterRoutes(db));
-        app.use('/api/airquality', airqualityRoutes(db));
+        app.use('/api/water', waterRoutes());
+        app.use('/api/airquality', airqualityRoutes());
         app.use('/api/system-config', systemConfigRoutes(db));
         app.use('/api/modules', modulesRoutes(db));
         app.use('/api/ota', otaRoutes(db));
@@ -83,7 +83,7 @@ async function startServer() {
         });
 
         // Setup WebSocket
-        const { broadcast } = setupWebSocket(server, db);
+        const { broadcast } = setupWebSocket(server);
 
         // Make broadcast available to routes if needed
         app.set('broadcast', broadcast);

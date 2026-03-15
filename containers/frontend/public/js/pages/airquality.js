@@ -1,5 +1,4 @@
 // Air Quality page - Indoor air quality monitoring
-import { API } from '../api.js';
 import { AirQualityDisplay } from '../components/airquality-display.js';
 
 let airqualityDisplay = null;
@@ -16,16 +15,12 @@ export const airqualityPage = {
         `;
     },
 
-    async init() {
-        try {
-            const airqualityData = await API.getAirQuality();
-            airqualityDisplay = new AirQualityDisplay('airquality-container');
-            document.getElementById('airquality-container').innerHTML = airqualityDisplay.render();
-            airqualityDisplay.init(airqualityData);
-        } catch (error) {
-            console.error('Failed to fetch air quality data:', error);
-            document.getElementById('airquality-container').innerHTML = '<p style="color: var(--danger);">Failed to load air quality data</p>';
-        }
+    init() {
+        // Air quality data arrives via WebSocket from CAN bus — no API fetch needed.
+        // Shows "-" until first real data arrives.
+        airqualityDisplay = new AirQualityDisplay('airquality-container');
+        document.getElementById('airquality-container').innerHTML = airqualityDisplay.render();
+        airqualityDisplay.init();
     },
 
     cleanup() {

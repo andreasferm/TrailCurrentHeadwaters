@@ -1,5 +1,4 @@
 // Energy page - Solar and battery monitoring
-import { API } from '../api.js';
 import { EnergyDisplay } from '../components/energy-display.js';
 
 let energyDisplay = null;
@@ -16,16 +15,12 @@ export const energyPage = {
         `;
     },
 
-    async init() {
-        try {
-            const energyData = await API.getEnergy();
-            energyDisplay = new EnergyDisplay('energy-container');
-            document.getElementById('energy-container').innerHTML = energyDisplay.render();
-            energyDisplay.init(energyData);
-        } catch (error) {
-            console.error('Failed to fetch energy data:', error);
-            document.getElementById('energy-container').innerHTML = '<p style="color: var(--danger);">Failed to load energy data</p>';
-        }
+    init() {
+        // Energy data arrives via WebSocket from CAN bus — no API fetch needed.
+        // Shows "-" until first real data arrives.
+        energyDisplay = new EnergyDisplay('energy-container');
+        document.getElementById('energy-container').innerHTML = energyDisplay.render();
+        energyDisplay.init();
     },
 
     cleanup() {
