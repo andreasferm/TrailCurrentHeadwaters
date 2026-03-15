@@ -54,7 +54,7 @@ export const configPage = {
                         <div class="wireless-form-group">
                             <label for="wifi-ssid" class="form-label">WiFi SSID (Network Name)</label>
                             <input type="text" id="wifi-ssid" class="form-input"
-                                   placeholder="e.g., TrailCurrent-OTA">
+                                   placeholder="e.g., Overlook-OTA">
                             <p class="form-hint">Name of the WiFi network MCUs will connect to</p>
                         </div>
 

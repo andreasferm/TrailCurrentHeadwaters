@@ -168,7 +168,7 @@ export const wizardPage = {
                         <input type="text"
                                id="wizard-wifi-ssid"
                                class="wizard-input"
-                               placeholder="e.g., TrailCurrent-OTA"
+                               placeholder="e.g., Overlook-OTA"
                                value="${systemConfig.wifi_ssid || ''}">
                         <p class="wizard-field-hint">Name of the WiFi network MCUs will connect to</p>
                         <div id="wizard-wifi-ssid-error" class="wizard-error hidden"></div>

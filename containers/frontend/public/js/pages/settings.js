@@ -38,7 +38,7 @@ export const settingsPage = {
             <div class="card settings-item-vertical">
                 <div class="settings-item-header">
                     <span class="settings-label">Cloud Configuration</span>
-                    <p class="settings-description">Configure connection to your TrailCurrent cloud service for remote management and deployments</p>
+                    <p class="settings-description">Configure connection to your cloud service for remote management and deployments</p>
                 </div>
                 <div class="cloud-config-container">
                     <div class="cloud-config-field">
@@ -89,7 +89,7 @@ export const settingsPage = {
             <div class="card settings-item-vertical">
                 <div class="settings-item-header">
                     <span class="settings-label">API Keys</span>
-                    <p class="settings-description">Generate API keys for programmatic access to your TrailCurrent system</p>
+                    <p class="settings-description">Generate API keys for programmatic access to your Overlook system</p>
                 </div>
                 <div class="api-keys-container">
                     <div class="api-keys-actions">
@@ -172,8 +172,8 @@ export const settingsPage = {
             <!-- App Info -->
             <div class="card settings-item" style="flex-direction: column; align-items: flex-start; gap: 10px;">
                 <span class="settings-label">About</span>
-                <p class="settings-description">TrailCurrent System __GIT_SHA__</p>
-                <p class="settings-description">A Progressive Web App for TrailCurrent</p>
+                <p class="settings-description">Overlook __GIT_SHA__</p>
+                <p class="settings-description">A Progressive Web App by TrailCurrent</p>
             </div>
         `;
     },
@@ -474,7 +474,7 @@ export const settingsPage = {
             listEl.innerHTML = `
                 <div class="api-key-empty">
                     <p>No API keys created yet.</p>
-                    <p class="api-key-empty-sub">Create an API key to access your TrailCurrent system programmatically.</p>
+                    <p class="api-key-empty-sub">Create an API key to access your Overlook system programmatically.</p>
                 </div>
             `;
             return;

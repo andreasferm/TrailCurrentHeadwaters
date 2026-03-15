@@ -1,6 +1,6 @@
 {
-    "name": "TrailCurrent In Vehicle",
-    "short_name": "TrailCurrent",
+    "name": "Overlook",
+    "short_name": "Overlook",
     "id": "/",
     "version": "__GIT_SHA__",
     "description": "Software defined vehicles for everyone",
