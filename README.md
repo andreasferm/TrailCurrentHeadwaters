@@ -1,5 +1,7 @@
 # TrailCurrent In-Vehicle Compute
 
+![TrailCurrent Headwaters](DOCS/IMGS/headwaters_case.png)
+
 Dockerized edge gateway with MQTT broker, tile server, and local dashboards. Part of the [TrailCurrent](https://trailcurrent.com) open-source vehicle platform.
 
 ## Quick Navigation
