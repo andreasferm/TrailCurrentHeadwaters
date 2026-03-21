@@ -1819,7 +1819,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "TrailCurrentHeadwatersCM5Carrier:MountingHole_2.7mm_M2.5_DIN965"
+		(property "Footprint" "TrailCurrentFootprints:MountingHole_2.7mm_M2.5_DIN965"
 			(at 22.86 180.975 0)
 			(effects
 				(font
@@ -1892,7 +1892,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "H4")
 					(unit 1)
@@ -1927,7 +1927,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "TrailCurrentHeadwatersCM5Carrier:MountingHole_2.7mm_M2.5_DIN965"
+		(property "Footprint" "TrailCurrentFootprints:MountingHole_2.7mm_M2.5_DIN965"
 			(at 22.86 175.895 0)
 			(effects
 				(font
@@ -2000,7 +2000,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "H3")
 					(unit 1)
@@ -2035,7 +2035,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "TrailCurrentHeadwatersCM5Carrier:MountingHole_2.7mm_M2.5_DIN965"
+		(property "Footprint" "TrailCurrentFootprints:MountingHole_2.7mm_M2.5_DIN965"
 			(at 22.86 170.815 0)
 			(effects
 				(font
@@ -2108,7 +2108,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "H2")
 					(unit 1)
@@ -2143,7 +2143,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "TrailCurrentHeadwatersCM5Carrier:MountingHole_2.7mm_M2.5_DIN965"
+		(property "Footprint" "TrailCurrentFootprints:MountingHole_2.7mm_M2.5_DIN965"
 			(at 22.86 165.735 0)
 			(effects
 				(font
@@ -2216,7 +2216,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "H1")
 					(unit 1)
@@ -2251,7 +2251,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "TrailCurrentHeadwatersCM5Carrier:MountingHole_2.7mm_M2.5_DIN965"
+		(property "Footprint" "TrailCurrentFootprints:MountingHole_2.7mm_M2.5_DIN965"
 			(at 43.815 165.735 0)
 			(effects
 				(font
@@ -2324,7 +2324,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "H5")
 					(unit 1)
@@ -2359,7 +2359,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "TrailCurrentHeadwatersCM5Carrier:MountingHole_2.7mm_M2.5_DIN965"
+		(property "Footprint" "TrailCurrentFootprints:MountingHole_2.7mm_M2.5_DIN965"
 			(at 43.815 180.975 0)
 			(effects
 				(font
@@ -2432,7 +2432,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "H8")
 					(unit 1)
@@ -2467,7 +2467,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "TrailCurrentHeadwatersCM5Carrier:MountingHole_2.7mm_M2.5_DIN965"
+		(property "Footprint" "TrailCurrentFootprints:MountingHole_2.7mm_M2.5_DIN965"
 			(at 43.815 175.895 0)
 			(effects
 				(font
@@ -2540,7 +2540,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "H7")
 					(unit 1)
@@ -2575,7 +2575,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "TrailCurrentHeadwatersCM5Carrier:MountingHole_2.7mm_M2.5_DIN965"
+		(property "Footprint" "TrailCurrentFootprints:MountingHole_2.7mm_M2.5_DIN965"
 			(at 43.815 170.815 0)
 			(effects
 				(font
@@ -2648,7 +2648,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "H6")
 					(unit 1)
@@ -2713,7 +2713,7 @@
 			(uuid "c7f90bb2-0431-4d78-adca-17ef654f711b")
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "#PWR031")
 					(unit 1)
@@ -2836,7 +2836,7 @@
 			(uuid "d83594dc-e88c-4a0a-8e24-5cdfbaac4255")
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "C18")
 					(unit 1)
@@ -2985,7 +2985,7 @@
 			(uuid "50951762-fdee-419e-aeb0-b7310ba2514e")
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "J11")
 					(unit 1)
@@ -3108,7 +3108,7 @@
 			(uuid "b96ce79e-de64-4bb5-8b7f-4429c99aa19f")
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "R9")
 					(unit 1)
@@ -3231,7 +3231,7 @@
 			(uuid "6f6e9283-9dfc-4003-89e3-ea1d47079c07")
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "C9")
 					(unit 1)
@@ -3296,7 +3296,7 @@
 			(uuid "cda5947c-c30d-4019-9c99-4366d9097258")
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "#PWR02")
 					(unit 1)
@@ -3361,7 +3361,7 @@
 			(uuid "0dbfcac6-1605-43aa-90dc-4a5b4c38b7be")
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(reference "#PWR013")
 					(unit 1)
@@ -3524,7 +3524,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(page "3")
 				)
@@ -3786,7 +3786,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(page "2")
 				)
@@ -3939,7 +3939,7 @@
 			)
 		)
 		(instances
-			(project "TrailCurrentHeadwatersCM5Carrier"
+			(project "TrailCurrentSymbolLibrary"
 				(path "/e63e39d7-6ac0-4ffd-8aa3-1841a4541b55"
 					(page "4")
 				)

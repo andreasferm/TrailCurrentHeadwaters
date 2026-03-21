@@ -1,4 +1,4 @@
 (sym_lib_table
   (version 7)
-  (lib (name "TrailCurrentHeadwatersCM5Carrier")(type "KiCad")(uri "${KIPRJMOD}/TrailCurrentHeadwatersCM5Carrier.kicad_sym")(options "")(descr ""))
+  (lib (name "TrailCurrentSymbolLibrary")(type "KiCad")(uri "${TRAILCURRENT_LIB_DIR}/symbols/TrailCurrentSymbolLibrary.kicad_sym")(options "")(descr "TrailCurrent custom symbols"))
 )
