@@ -21,6 +21,7 @@ mmdebstrap:
     - unzip
     - nvme-cli
     - parted
+    - cloud-guest-utils
 
   customize-hooks:
     # ── Docker CE from official repo ─────────────────────────────────
@@ -35,27 +36,17 @@ mmdebstrap:
       chroot "$1" apt-get install -y --no-install-recommends \
         docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-    # ── Docker: use NVMe for storage ─────────────────────────────────
-    # Point Docker's data-root to the NVMe mount. Docker will wait for
-    # the NVMe to be mounted before starting (see override below).
+    # ── Docker: log rotation config ──────────────────────────────────
     - |
       mkdir -p "$1/etc/docker"
       cat > "$1/etc/docker/daemon.json" << 'EOF'
       {
-        "data-root": "/mnt/nvme/docker",
         "log-driver": "json-file",
         "log-opts": {
           "max-size": "10m",
           "max-file": "3"
         }
       }
-      EOF
-    # Docker systemd override: wait for NVMe before starting
-    - |
-      mkdir -p "$1/etc/systemd/system/docker.service.d"
-      cat > "$1/etc/systemd/system/docker.service.d/nvme-dependency.conf" << 'EOF'
-      [Unit]
-      RequiresMountsFor=/mnt/nvme
       EOF
 
     # ── config.txt: CAN bus + power savings ──────────────────────────
@@ -83,9 +74,6 @@ mmdebstrap:
       dtparam=fan_temp0=50000
       dtparam=fan_temp0_hyst=5000
       CFGEOF
-
-    # ── NVMe mount point ─────────────────────────────────────────────
-    - mkdir -p "$1/mnt/nvme"
 
     # ── can0 systemd service ─────────────────────────────────────────
     - |

@@ -1,55 +1,63 @@
 # CM5 Setup Guide
 
-This guide covers everything needed to go from a bare Compute Module 5 to a
-running TrailCurrent Headwaters unit.
+This guide covers everything needed to go from bare Compute Module 5 boards to
+running TrailCurrent Headwaters units. It is designed for mass flashing — follow
+the steps in order with no gaps.
 
 ## Hardware Requirements
 
-- Raspberry Pi Compute Module 5 (with eMMC)
+- Raspberry Pi Compute Module 5 (CM5 or CM5 Lite — eMMC is not used)
 - CM5 carrier board (IO Board or custom) with:
   - USB-C port for flashing
   - EMMC_DISABLE jumper (sometimes labelled "nRPIBOOT" or "Disable eMMC Boot")
+    — only needed for CM5 with eMMC; CM5 Lite enters USB boot automatically
   - NVMe M.2 slot (M-key or B+M-key)
-- NVMe SSD (any capacity — 128 GB+ recommended)
+- NVMe SSD (128 GB+ recommended) — this is the boot and root drive
 - TrailCurrent CAN Hat (MCP2515, SPI0/CE0, 12 MHz crystal, GPIO25 interrupt)
 - Ethernet connection
 - A Linux computer for building and flashing (Debian/Ubuntu, arm64 or x86_64)
 
 ## Storage Architecture
 
-The CM5 uses a split-storage layout to balance reliability with performance:
+Everything lives on the NVMe drive. The root partition is automatically
+expanded to fill the entire drive on first boot.
 
 | Drive | Mount | Contents |
 |-------|-------|----------|
-| eMMC  | `/`   | OS, system packages, Docker engine, deployment scripts, config |
-| NVMe  | `/mnt/nvme` | Docker images and volumes, MongoDB data, map tiles, Node-RED data, Python venv |
+| NVMe  | `/`   | OS, system packages, Docker (engine + images + volumes), app data, Python venv |
 
-The eMMC holds the OS and is small but reliable. The NVMe holds all large and
-frequently-written data (Docker, databases, tiles). Symlinks make this
-transparent to the application:
+Application data directories:
 
 ```
-~/data       -> /mnt/nvme/data        (keys, tileserver, node-red)
-~/local_code -> /mnt/nvme/local_code  (Python venv, CAN-to-MQTT scripts)
+~/data           (keys, tileserver, node-red)
+~/local_code     (Python venv, CAN-to-MQTT scripts)
 ```
 
-Docker's `data-root` is set to `/mnt/nvme/docker`, so all container images,
-running containers, and named volumes (like `mongodb-data`) live on the NVMe.
+Docker uses the default data-root (`/var/lib/docker`) since everything is on
+the NVMe.
 
-The NVMe is **automatically** partitioned, formatted (ext4), and mounted on
-first boot. No manual preparation is needed — just install the drive before
-powering on.
+> **CM5 with eMMC:** The eMMC is present but unused. The EEPROM is configured
+> to boot exclusively from NVMe (`BOOT_ORDER=0xfe6`).
 
-> **No NVMe?** The first-boot script detects this and falls back to eMMC-only
-> storage. Everything works, just slower and with less space.
+## One-Time Setup (Build Host)
 
-## Quick Start
+These steps only need to be done once on the computer you use for flashing.
 
 ### 1. Build the rpiboot Tool
 
-The `rpiboot` tool puts the CM5 into USB mass storage mode so you can flash
-the eMMC from your computer. The version from APT has known issues with CM5,
-so we build from source:
+The `rpiboot` tool loads a payload onto the CM5 over USB. The `-d` flag
+selects which payload directory to use — different directories do different
+things:
+
+| Command | Payload | What it does |
+|---------|---------|-------------|
+| `rpiboot -d recovery5` | EEPROM updater | Programs the CM5's EEPROM (boot order, power settings). No storage is exposed. |
+| `rpiboot -d mass-storage-gadget64` | Minimal Linux | Boots Linux on the CM5 which exposes its storage (eMMC, NVMe) as USB mass storage devices for flashing. |
+
+The `rpiboot` binary is the same in both cases. **You must power cycle the
+carrier board between consecutive rpiboot operations.**
+
+The version from APT has known issues with CM5, so we build from source:
 
 ```bash
 git clone https://github.com/raspberrypi/usbboot CM5/usbboot
@@ -59,10 +67,24 @@ make
 ```
 
 This produces the `rpiboot` binary in `CM5/usbboot/`. The submodule step
-fetches the EEPROM firmware files needed for both flashing and
-[EEPROM recovery](#eeprom-recovery-boot_order-or-firmware-errors).
+fetches the EEPROM firmware files needed for both flashing and EEPROM
+configuration.
 
-### 2. Build the Base Image
+### 2. Build the EEPROM Image
+
+The EEPROM must be configured to boot from NVMe before a board will work.
+Build the EEPROM image once — it is reused for every board:
+
+```bash
+cd CM5/usbboot/recovery5
+./update-pieeprom.sh
+```
+
+This bakes `boot.conf` (which sets `BOOT_ORDER=0xf16` — NVMe first, SD
+fallback) into an EEPROM image. The output is used in the per-device
+procedure below.
+
+### 3. Build the Base Image
 
 The base image includes the OS, Docker, CAN bus configuration, power
 optimizations, and all system dependencies. It does **not** include the
@@ -92,75 +114,139 @@ Output: `CM5/rpi-image-gen/work/image-trailcurrent-cm5-base/trailcurrent-cm5-bas
 > On x86_64 hosts, QEMU user-mode emulation is used automatically (slower
 > but works). Native arm64 builds are faster.
 
-### 3. Flash the eMMC
+---
 
-#### Put the CM5 in USB Boot Mode
+## Per-Device Flashing Procedure
 
-1. If you have an NVMe SSD, install it into the carrier board's M.2 slot
-   (optional — it will be set up automatically on first boot)
-2. Fit the **EMMC_DISABLE** jumper on the carrier board
+Repeat these steps for each CM5 board. The order matters — do not skip steps.
+
+### Step 1: Prepare the Hardware
+
+1. Install the NVMe SSD into the carrier board's M.2 slot
+2. **CM5 with eMMC:** Fit the **EMMC_DISABLE** jumper on the carrier board
+   **CM5 Lite:** No jumper needed — skip this step
 3. Connect the carrier board's USB-C to your computer
 4. Apply power to the carrier board
+5. Verify the CM5 is detected:
+   ```bash
+   lsusb | grep -i broadcom
+   ```
+   You should see `BCM2712D0 Boot`.
 
-#### Expose the eMMC as a USB Device
+### Step 2: Flash the EEPROM (Required for Every New Board)
 
-From the repository root:
+Fresh CM5 boards ship with a factory boot order (`BOOT_ORDER=0xf2461`) that
+tries eMMC/SD before NVMe. **The board will not boot from NVMe until the
+EEPROM is updated.** This step must be done before flashing the NVMe image.
+
+```bash
+cd CM5/usbboot/recovery5
+sudo ../rpiboot -d .
+```
+
+Wait for the tool to complete (you'll see `Second stage boot server done`
+followed by EEPROM write messages).
+
+**Power cycle the carrier board** — unplug power, wait a few seconds, plug
+back in. rpiboot will not work for the next step without a power cycle.
+
+### Step 3: Wipe Old Storage (Recommended)
+
+This step ensures no leftover partitions or boot data cause issues. Skip this
+only if you are certain the board has never been flashed before.
+
+Put the CM5 back into USB mass storage mode:
 
 ```bash
 cd CM5/usbboot
 sudo ./rpiboot -d mass-storage-gadget64
 ```
 
-You should see output ending with `Second stage boot server done`. The CM5's
-eMMC will appear as a new block device. Check which device it is:
+Wait for `Second stage boot server done`, then check what appeared:
 
 ```bash
 lsblk
 ```
 
-Look for a new disk matching the eMMC size (e.g., `/dev/sda`).
+- **CM5 Lite:** One new `sd*` device appears — that's the NVMe.
+- **CM5 with eMMC:** Two new `sd*` devices appear. The NVMe is the **larger**
+  one (e.g., 128+ GB vs 16/32 GB for eMMC).
 
-> **Be absolutely sure you have the right device.** `dd` will overwrite
-> whatever you point it at.
-
-#### Write the Image
-
-Your desktop may auto-mount the eMMC's boot partition. Unmount it before
-flashing:
+Unmount any auto-mounted partitions, then zero both devices (or just the NVMe
+if CM5 Lite):
 
 ```bash
-sudo umount /dev/sdX1 2>/dev/null
-sudo umount /dev/sdX2 2>/dev/null
+# Unmount anything that auto-mounted
+sudo umount /dev/sdX* 2>/dev/null
+
+# Wipe the NVMe (replace sdX with the larger device)
+sudo dd if=/dev/zero of=/dev/sdX bs=4M count=100 status=progress conv=fsync
+
+# Wipe the eMMC too if present (replace sdY with the smaller device)
+sudo dd if=/dev/zero of=/dev/sdY bs=4M count=100 status=progress conv=fsync
 ```
 
-Then write the image:
+This zeros the first 400 MB, which destroys partition tables, boot sectors,
+and filesystem headers.
+
+**Power cycle the carrier board** before the next step.
+
+### Step 4: Flash the NVMe
+
+Put the CM5 back into USB mass storage mode:
 
 ```bash
+cd CM5/usbboot
+sudo ./rpiboot -d mass-storage-gadget64
+```
+
+Wait for `Second stage boot server done`, then identify the NVMe:
+
+```bash
+lsblk
+```
+
+- **CM5 Lite:** One new `sd*` device (no partitions) — that's the NVMe.
+- **CM5 with eMMC:** Two `sd*` devices with no partitions. The NVMe is the
+  **larger** one.
+
+> **Be absolutely sure you have the right device.** `dd` will overwrite
+> whatever you point it at. Your host's NVMe drives show up as `nvme*`, not
+> `sd*`, so there is no risk of confusion with local drives.
+
+Unmount any auto-mounted partitions, then write the image:
+
+```bash
+sudo umount /dev/sdX* 2>/dev/null
+
 sudo dd if=CM5/rpi-image-gen/work/image-trailcurrent-cm5-base/trailcurrent-cm5-base.img \
     of=/dev/sdX bs=4M status=progress conv=fsync
 ```
 
-Replace `/dev/sdX` with your actual device.
+Replace `/dev/sdX` with the NVMe device.
 
-#### Prepare for First Boot
+> **Always use `conv=fsync`.** Without it, `dd` may return before data is
+> physically written, resulting in a corrupted image.
 
-1. Remove the EMMC_DISABLE jumper
+### Step 5: Prepare for First Boot
+
+1. **CM5 with eMMC:** Remove the EMMC_DISABLE jumper
 2. Disconnect the USB cable
 3. Connect Ethernet
 4. Power cycle the carrier board
 
-### 4. First Boot
+### Step 6: First Boot
 
-On the first boot, the `trailcurrent-firstboot` service runs automatically and
-handles all per-device setup:
+The CM5 should boot from NVMe. On the first boot, the
+`trailcurrent-firstboot` service runs automatically and handles all
+per-device setup:
 
-1. **NVMe setup** — Detects the NVMe drive, creates a GPT partition table,
-   formats it as ext4, mounts it at `/mnt/nvme`, and adds an fstab entry.
-   Creates symlinks from `~/data` and `~/local_code` to the NVMe.
+1. **Partition expansion** — Expands the root partition to fill the entire
+   NVMe drive using `growpart` and `resize2fs`.
 
-2. **EEPROM configuration** — Sets `BOOT_ORDER=0xfe1` (eMMC only, then
+2. **EEPROM configuration** — Sets `BOOT_ORDER=0xfe6` (NVMe only, then
    stop), `WAKE_ON_GPIO=0`, and `POWER_OFF_ON_HALT=1` so the CM5 boots
-   exclusively from eMMC and starts automatically when power is applied
+   exclusively from NVMe and starts automatically when power is applied
    (no power button needed in a vehicle install).
 
 3. **TLS certificates** — Generates a self-signed CA and server certificate
@@ -184,17 +270,17 @@ effect:
 sudo reboot
 ```
 
-### 5. Verify the System
+### Step 7: Verify the System
 
 After the reboot:
 
 ```bash
-# Check NVMe is mounted
-df -h /mnt/nvme
+# Check root is on NVMe and partition is expanded
+df -h /
 
-# Check Docker is using NVMe storage
+# Check Docker is running
 docker info | grep "Docker Root Dir"
-# Expected: /mnt/nvme/docker
+# Expected: /var/lib/docker
 
 # Check CAN interface (requires CAN hat to be connected)
 ifconfig can0
@@ -206,7 +292,7 @@ ls /dev/spidev0.*
 systemctl status can0 docker trailcurrent-firstboot
 ```
 
-### 6. Deploy the Application
+### Step 8: Deploy the Application
 
 The base image is ready for the TrailCurrent application stack. Transfer a
 deployment package and run the standard deployment:
@@ -220,18 +306,41 @@ unzip trailcurrent-deployment-*.zip
 
 See [PI_DEPLOYMENT.md](../PI_DEPLOYMENT.md) for full deployment instructions.
 
+---
+
+## Per-Device Quick Reference
+
+For experienced operators who have done this before. Refer to the full
+procedure above if anything is unclear.
+
+```
+For each board:
+  1. Install NVMe, fit EMMC_DISABLE jumper (if eMMC), connect USB, power on
+  2. cd CM5/usbboot/recovery5 && sudo ../rpiboot -d .       # Flash EEPROM
+  3. Power cycle
+  4. cd CM5/usbboot && sudo ./rpiboot -d mass-storage-gadget64  # Expose storage
+  5. lsblk                                                   # Identify NVMe (larger sd* device)
+  6. sudo dd if=...img of=/dev/sdX bs=4M status=progress conv=fsync  # Flash NVMe
+  7. Remove jumper, disconnect USB, connect Ethernet, power cycle
+  8. Wait for first boot (~2-3 min), then: sudo reboot
+  9. Verify: df -h / && docker info | grep "Docker Root Dir"
+```
+
+---
+
 ## What's in the Base Image
 
 ### System Packages
 
 `jq`, `openssl`, `python3`, `python3-venv`, `python3-pip`, `can-utils`,
-`avahi-daemon`, `avahi-utils`, `curl`, `unzip`, `nvme-cli`, `parted`
+`avahi-daemon`, `avahi-utils`, `curl`, `unzip`, `nvme-cli`, `parted`,
+`cloud-guest-utils`
 
 ### Docker
 
 Docker CE and Docker Compose plugin, installed from Docker's official
-repository. Data root is on the NVMe at `/mnt/nvme/docker`. Docker waits
-for the NVMe mount before starting.
+repository. Uses the default data root (`/var/lib/docker`) on the NVMe root
+filesystem.
 
 ### Boot Configuration (config.txt)
 
@@ -257,10 +366,10 @@ for the NVMe mount before starting.
 
 | Service | Purpose | Auto-starts? |
 |---------|---------|-------------|
-| `trailcurrent-firstboot` | One-time NVMe/EEPROM/TLS/venv setup | Once (first boot only) |
+| `trailcurrent-firstboot` | One-time partition expansion/EEPROM/TLS/venv setup | Once (first boot only) |
 | `can0` | Brings up CAN bus at 500 kbps | Yes (when can0 device exists) |
 | `disable-usb` | Unbinds USB hub to save power | Yes |
-| `docker` | Container runtime | Yes (after NVMe mount) |
+| `docker` | Container runtime | Yes |
 | `cantomqtt` | CAN-to-MQTT bridge | After deployment (ConditionPathExists) |
 | `deployment-watcher` | Watches for OTA deployment updates | After deployment (ConditionPathExists) |
 
@@ -268,7 +377,8 @@ for the NVMe mount before starting.
 
 ### rpiboot doesn't detect the CM5
 
-- Verify the EMMC_DISABLE jumper is fitted
+- **CM5 with eMMC:** Verify the EMMC_DISABLE jumper is fitted
+- **CM5 Lite:** Should enter USB boot automatically — if not, check power
 - Check USB connection: `lsusb | grep -i broadcom` should show `BCM2712D0 Boot`
 - Try a different USB cable or port
 - Power cycle the carrier board with USB already connected
@@ -280,18 +390,17 @@ for the NVMe mount before starting.
   flashing), you must power cycle the carrier board. Without a power cycle,
   `rpiboot` will hang at "Waiting for BCM..."
 
-### NVMe not detected on first boot
+### NVMe not detected by rpiboot
 
-- Check the drive is seated properly in the M.2 slot
-- Verify the drive is recognized: `sudo nvme list`
-- Re-run first boot: `sudo rm /var/lib/trailcurrent/.firstboot-done && sudo systemctl start trailcurrent-firstboot`
-- Check logs: `journalctl -u trailcurrent-firstboot`
+- Check the NVMe SSD is seated properly in the M.2 slot
+- After running `rpiboot -d mass-storage-gadget64`, run `lsblk` to confirm
+  the NVMe appears as a block device
+- Try a different NVMe drive
 
 ### Docker won't start
 
-- If no NVMe is present, Docker may be waiting for a mount that won't arrive.
-  Re-run first boot (which detects the missing NVMe and reconfigures Docker):
-  `sudo rm /var/lib/trailcurrent/.firstboot-done && sudo systemctl start trailcurrent-firstboot`
+- Check Docker service status: `systemctl status docker`
+- Check logs: `journalctl -u docker`
 
 ### CAN bus not working
 
@@ -311,46 +420,29 @@ output works during boot and at the Linux console.
 
 | Symptom | Likely cause |
 |---------|-------------|
-| `FAT 32 bad cluster` in boot output | Corrupted eMMC flash — reflash with `conv=fsync` |
-| `Boot mode: STOP` appears immediately | Bad `BOOT_ORDER` in EEPROM — needs EEPROM recovery |
+| `Boot mode: STOP` appears immediately | Bad `BOOT_ORDER` in EEPROM — redo Step 2 |
 | 3 LED blinks (repeating) | Bootloader can't find firmware — corrupted flash or EEPROM issue |
-| Tries NVMe/USB/Network but not eMMC | EEPROM boot order skips eMMC — needs EEPROM recovery |
-| Boots an old OS from NVMe | NVMe has a previous install — wipe it or fix boot order |
-| Black screen, no LED activity | Check power supply and EMMC_DISABLE jumper is removed |
+| Tries eMMC/SD/USB but not NVMe | EEPROM boot order doesn't include NVMe — redo Step 2 |
+| Black screen, no LED activity | Check power supply and EMMC_DISABLE jumper is removed (CM5 with eMMC) |
+| `no image found` | NVMe is blank or not flashed — do Step 4 |
 
-**If the eMMC flash is corrupted**, reflash using rpiboot (step 3 above). Always
-use `conv=fsync` with `dd` to ensure data is fully written before the command
-returns. Without `conv=fsync`, `dd` may return before data is physically
-written, resulting in a corrupted image.
+**If the NVMe flash is corrupted**, reflash using Steps 3-4 of the per-device
+procedure. Always use `conv=fsync` with `dd` to ensure data is fully written
+before the command returns.
 
-**If the EEPROM needs recovery**, see the section below.
+### EEPROM recovery
 
-### EEPROM recovery (BOOT_ORDER or firmware errors)
+If the EEPROM is in an unknown state, redo Step 2 of the per-device procedure:
 
-If the EEPROM boot order is misconfigured and the CM5 won't boot at all, you
-can reflash the EEPROM directly using the usbboot recovery tool:
-
-1. Fit the **EMMC_DISABLE** jumper
+1. Fit the **EMMC_DISABLE** jumper (CM5 with eMMC) or just connect USB (CM5 Lite)
 2. Connect USB-C to your computer
 3. Power on the carrier board
-4. Run the EEPROM recovery:
-
-```bash
-cd CM5/usbboot/recovery5
-./update-pieeprom.sh
-sudo ../rpiboot -d .
-```
-
-This resets the EEPROM to factory defaults (`BOOT_ORDER=0xf2461`). Wait for
-the tool to complete, then:
-
-5. Power cycle the carrier board (unplug power, wait a few seconds, replug) —
-   `rpiboot` will not work for subsequent operations without a power cycle
-6. Remove the EMMC_DISABLE jumper
-7. Power cycle the board again to boot normally
-
-The CM5 should now boot from eMMC. The first-boot script will reconfigure the
-EEPROM with the production settings (`BOOT_ORDER=0xfe1`) on its next run.
+4. Run:
+   ```bash
+   cd CM5/usbboot/recovery5
+   sudo ../rpiboot -d .
+   ```
+5. Power cycle, then continue with Step 3 or Step 4
 
 > **Note:** If `update-pieeprom.sh` reports missing files, ensure the usbboot
 > submodule is initialized: `cd CM5/usbboot && git submodule init && git submodule update`
@@ -367,7 +459,10 @@ journalctl -u trailcurrent-firstboot --no-pager
 CM5/
 ├── SETUP.md                  <- This file
 ├── usbboot/                  <- rpiboot tool (built from source)
-│   └── rpiboot              <- Binary for USB boot mode
+│   ├── rpiboot              <- Binary for USB boot mode
+│   └── recovery5/           <- EEPROM configuration
+│       ├── boot.conf        <- Boot order settings (BOOT_ORDER=0xf16)
+│       └── update-pieeprom.sh <- Builds EEPROM image from boot.conf
 ├── image/                    <- Image build system
 │   ├── build.sh             <- Build wrapper script
 │   ├── config/
