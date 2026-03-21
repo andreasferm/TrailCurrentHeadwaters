@@ -292,19 +292,88 @@ ls /dev/spidev0.*
 systemctl status can0 docker trailcurrent-firstboot
 ```
 
-### Step 8: Deploy the Application
+### Step 8: Transfer Map Tiles
 
-The base image is ready for the TrailCurrent application stack. Transfer a
-deployment package and run the standard deployment:
+The tileserver requires a map tiles file (~25 GB). This must be transferred
+before deploying the application, as the tileserver container will fail
+without it.
+
+From your build host:
+
+```bash
+scp /path/to/map.mbtiles trailcurrent@headwaters.local:~/data/tileserver/
+```
+
+> **This transfer takes a while over Ethernet.** You can continue with
+> Steps 9-10 in a separate SSH session while the transfer runs, but do not
+> start the application (Step 11) until the transfer is complete.
+
+### Step 9: Transfer the Deployment Package
+
+From your build host:
 
 ```bash
 scp trailcurrent-deployment-*.zip trailcurrent@headwaters.local:~/
+```
+
+### Step 10: Configure the Environment
+
+SSH to the board and extract the deployment package:
+
+```bash
 ssh trailcurrent@headwaters.local
 unzip trailcurrent-deployment-*.zip
+```
+
+The first run of `deploy.sh` creates `.env` from `.env.example`. Edit it
+with your credentials:
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Set these values:
+- `MQTT_USERNAME` / `MQTT_PASSWORD` — MQTT broker credentials
+- `ADMIN_PASSWORD` — Admin password for the web UI
+- `TLS_CERT_HOSTNAME=headwaters.local`
+- `ENCRYPTION_KEY` — generate with `openssl rand -hex 32`
+- `NODE_RED_CREDENTIAL_SECRET` — generate with `openssl rand -hex 64`
+
+### Step 11: Deploy the Application
+
+```bash
+chmod +x deploy.sh
 ./deploy.sh
 ```
 
-See [PI_DEPLOYMENT.md](../PI_DEPLOYMENT.md) for full deployment instructions.
+`deploy.sh` will:
+- Load all Docker images from tar files
+- Start all services
+- Set up the CAN-to-MQTT bridge
+- Set up the deployment watcher (for cloud OTA updates)
+- Deploy MCU firmware via OTA (if firmware is included)
+
+### Step 12: Verify the Application
+
+```bash
+# All containers running
+docker compose ps
+
+# No errors in logs
+docker compose logs --tail=20
+
+# API responding
+curl -k https://localhost/api/health
+
+# Web UI accessible
+curl -k -o /dev/null -s -w "%{http_code}" https://localhost/
+```
+
+Access the web UI at `https://headwaters.local`.
+
+See [PI_DEPLOYMENT.md](../PI_DEPLOYMENT.md) for update procedures, CA
+certificate installation on client devices, and troubleshooting.
 
 ---
 
@@ -323,7 +392,11 @@ For each board:
   6. sudo dd if=...img of=/dev/sdX bs=4M status=progress conv=fsync  # Flash NVMe
   7. Remove jumper, disconnect USB, connect Ethernet, power cycle
   8. Wait for first boot (~2-3 min), then: sudo reboot
-  9. Verify: df -h / && docker info | grep "Docker Root Dir"
+  9. Verify base: df -h / && systemctl status can0
+ 10. scp map.mbtiles to ~/data/tileserver/
+ 11. scp deployment zip, unzip, configure .env
+ 12. ./deploy.sh
+ 13. Verify: docker compose ps && curl -k https://localhost/api/health
 ```
 
 ---
@@ -332,9 +405,9 @@ For each board:
 
 ### System Packages
 
-`jq`, `openssl`, `python3`, `python3-venv`, `python3-pip`, `can-utils`,
-`avahi-daemon`, `avahi-utils`, `curl`, `unzip`, `nvme-cli`, `parted`,
-`cloud-guest-utils`
+`jq`, `openssl`, `python3`, `python3-venv`, `python3-pip`, `iproute2`,
+`can-utils`, `avahi-daemon`, `avahi-utils`, `curl`, `unzip`, `nvme-cli`,
+`parted`, `cloud-guest-utils`
 
 ### Docker
 
