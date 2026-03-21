@@ -15,7 +15,7 @@ set -e
 #   6. Installs can0 systemd service to auto-start on boot (500kbps)
 #   7. Adds user to the docker group
 #   8. Configures Pi 5 to auto-boot on power (no power button needed)
-#   9. Disables unused hardware for power savings (GPU, HDMI, BT, WiFi, USB, audio)
+#   9. Disables unused hardware and underclocks CPU for power/heat savings
 #  10. Sets up the Python virtual environment for the CAN-to-MQTT bridge
 #  11. Installs the cantomqtt systemd service
 #  12. Creates the deployment directory structure
@@ -275,6 +275,12 @@ echo "Step 9: Disabling unused hardware for power savings..."
 
 # This is a headless system using only Ethernet and SPI (CAN bus).
 # Disable everything else to reduce power draw (~250-450 mW savings).
+# Underclock the CPU to 600MHz — the TrailCurrent workload (Node-RED,
+# Mosquitto, MongoDB) uses ~15% CPU at 1.7GHz, so 600MHz provides ample
+# headroom while significantly reducing power consumption and heat.
+# The active cooler fan threshold is lowered to 50°C to keep the SoC cool
+# inside the production enclosure (the CAN hat blocks passive cooling
+# from the top and the NVME base blocks the bottom).
 POWER_OVERLAYS=(
     "dtoverlay=disable-bt"
     "dtoverlay=disable-wifi"
@@ -284,6 +290,10 @@ POWER_PARAMS=(
     "dtparam=act_led_trigger=none"
     "dtparam=act_led_activelow=off"
     "gpu_mem=16"
+    "arm_freq=600"
+    "over_voltage=-4"
+    "dtparam=fan_temp0=50000"
+    "dtparam=fan_temp0_hyst=5000"
 )
 
 for overlay in "${POWER_OVERLAYS[@]}"; do

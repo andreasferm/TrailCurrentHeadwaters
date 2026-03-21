@@ -1,0 +1,210 @@
+# METABEGIN
+# X-Env-Layer-Name: trailcurrent-base
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: TrailCurrent in-vehicle compute base system
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: bookworm-minbase,rpi-user-credentials,systemd-net-min
+# X-Env-Layer-Provides: trailcurrent-base
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - jq
+    - openssl
+    - python3
+    - python3-venv
+    - python3-pip
+    - can-utils
+    - avahi-daemon
+    - avahi-utils
+    - curl
+    - unzip
+    - nvme-cli
+    - parted
+
+  customize-hooks:
+    # ── Docker CE from official repo ─────────────────────────────────
+    - |
+      mkdir -p "$1/etc/apt/keyrings"
+      curl -fsSL https://download.docker.com/linux/debian/gpg \
+        | gpg --dearmor -o "$1/etc/apt/keyrings/docker.gpg"
+      chmod a+r "$1/etc/apt/keyrings/docker.gpg"
+      echo "deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
+        > "$1/etc/apt/sources.list.d/docker.list"
+      chroot "$1" apt-get update
+      chroot "$1" apt-get install -y --no-install-recommends \
+        docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+    # ── Docker: use NVMe for storage ─────────────────────────────────
+    # Point Docker's data-root to the NVMe mount. Docker will wait for
+    # the NVMe to be mounted before starting (see override below).
+    - |
+      mkdir -p "$1/etc/docker"
+      cat > "$1/etc/docker/daemon.json" << 'EOF'
+      {
+        "data-root": "/mnt/nvme/docker",
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+      EOF
+    # Docker systemd override: wait for NVMe before starting
+    - |
+      mkdir -p "$1/etc/systemd/system/docker.service.d"
+      cat > "$1/etc/systemd/system/docker.service.d/nvme-dependency.conf" << 'EOF'
+      [Unit]
+      RequiresMountsFor=/mnt/nvme
+      EOF
+
+    # ── config.txt: CAN bus + power savings ──────────────────────────
+    - |
+      cat >> "$1/boot/firmware/config.txt" << 'CFGEOF'
+
+      # ── TrailCurrent CAN bus (MCP2515 on SPI0/CE0, 12MHz xtal, GPIO25 INT) ──
+      dtparam=spi=on
+      dtoverlay=mcp2515-can0,oscillator=12000000,interrupt=25,spimaxfrequency=2000000
+
+      # ── Power savings: disable unused peripherals ──
+      dtoverlay=disable-bt
+      dtoverlay=disable-wifi
+      dtoverlay=disable-hdmi0
+      dtoverlay=disable-hdmi1
+      dtparam=audio=off
+      dtparam=act_led_trigger=none
+      dtparam=act_led_activelow=off
+      gpu_mem=16
+
+      # ── Underclock to 600 MHz (ample for Node-RED/Mosquitto/MongoDB workload) ──
+      arm_freq=600
+
+      # ── Active cooler: lower fan threshold for enclosed operation ──
+      dtparam=fan_temp0=50000
+      dtparam=fan_temp0_hyst=5000
+      CFGEOF
+
+    # ── NVMe mount point ─────────────────────────────────────────────
+    - mkdir -p "$1/mnt/nvme"
+
+    # ── can0 systemd service ─────────────────────────────────────────
+    - |
+      cat > "$1/etc/systemd/system/can0.service" << 'EOF'
+      [Unit]
+      Description=CAN bus interface can0
+      Requires=sys-subsystem-net-devices-can0.device
+      After=sys-subsystem-net-devices-can0.device
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      # Delay for MCP2515 crystal oscillator to stabilize after power-on
+      ExecStartPre=/bin/sleep 15
+      ExecStart=/sbin/ip link set can0 type can bitrate 500000
+      ExecStart=/sbin/ip link set can0 up
+      ExecStop=/sbin/ip link set can0 down
+      Restart=on-failure
+      RestartSec=10
+      TimeoutStartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+    # ── disable-usb systemd service (save power) ────────────────────
+    - |
+      cat > "$1/etc/systemd/system/disable-usb.service" << 'EOF'
+      [Unit]
+      Description=Disable USB hub to save power
+      After=multi-user.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/bash -c 'for port in /sys/bus/usb/devices/[0-9]-[0-9]; do [ -e "$port/driver" ] && echo "$(basename $port)" > /sys/bus/usb/drivers/usb/unbind || true; done'
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+    # ── First-boot service (NVMe, EEPROM, TLS certs, venv) ──────────
+    - install -m 755 "$SRCROOT/layer/files/trailcurrent-firstboot.sh" "$1/usr/local/bin/trailcurrent-firstboot.sh"
+    - |
+      cat > "$1/etc/systemd/system/trailcurrent-firstboot.service" << 'EOF'
+      [Unit]
+      Description=TrailCurrent first-boot setup (NVMe, EEPROM, TLS, venv)
+      Before=docker.service
+      After=network-online.target
+      Wants=network-online.target
+      ConditionPathExists=!/var/lib/trailcurrent/.firstboot-done
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/trailcurrent-firstboot.sh
+      ExecStartPost=/bin/mkdir -p /var/lib/trailcurrent
+      ExecStartPost=/bin/touch /var/lib/trailcurrent/.firstboot-done
+      RemainAfterExit=yes
+      TimeoutStartSec=300
+      StandardOutput=journal+console
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+    # ── cantomqtt systemd service (starts after deployment provides code) ──
+    - |
+      cat > "$1/etc/systemd/system/cantomqtt.service" << 'SVCEOF'
+      [Unit]
+      Description=CAN Bus to MQTT Service
+      After=docker.service can0.service
+      Requires=docker.service can0.service
+      # Only start if deployment has provided the code
+      ConditionPathExists=/home/trailcurrent/local_code/can-to-mqtt.py
+
+      [Service]
+      Type=simple
+      User=trailcurrent
+      WorkingDirectory=/home/trailcurrent/local_code
+      EnvironmentFile=/home/trailcurrent/local_code/.env
+      ExecStart=/home/trailcurrent/local_code/cantomqtt/bin/python /home/trailcurrent/local_code/can-to-mqtt.py
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+      SVCEOF
+
+    # ── deployment-watcher systemd service ───────────────────────────
+    - |
+      cat > "$1/etc/systemd/system/deployment-watcher.service" << 'SVCEOF'
+      [Unit]
+      Description=TrailCurrent Deployment Watcher
+      After=docker.service network-online.target
+      Requires=docker.service
+      Wants=network-online.target
+      # Only start if deployment has provided the code
+      ConditionPathExists=/home/trailcurrent/local_code/deployment-watcher.py
+
+      [Service]
+      Type=simple
+      User=trailcurrent
+      WorkingDirectory=/home/trailcurrent/local_code
+      EnvironmentFile=/home/trailcurrent/local_code/.env
+      ExecStart=/home/trailcurrent/local_code/cantomqtt/bin/python /home/trailcurrent/local_code/deployment-watcher.py
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+      SVCEOF
+
+    # ── Enable all services ──────────────────────────────────────────
+    - $BDEBSTRAP_HOOKS/enable-units "$1" can0 disable-usb docker trailcurrent-firstboot cantomqtt deployment-watcher
+
+    # ── Add default user to docker group ─────────────────────────────
+    - chroot "$1" usermod -aG docker trailcurrent
+
+  cleanup-hooks:
+    # Remove apt caches to shrink the image
+    - chroot "$1" apt-get clean
+    - rm -rf "$1/var/lib/apt/lists/"*

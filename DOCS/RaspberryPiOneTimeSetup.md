@@ -141,10 +141,11 @@ The script installs and configures everything automatically:
 | 6 | Installs `can0.service` systemd unit to auto-start CAN interface at 500kbps |
 | 7 | Adds your user to the `docker` group |
 | 8 | Configures auto-boot on power — Pi 5 only (no power button needed in vehicle) |
-| 9 | Creates Python virtual environment at `~/local_code/cantomqtt` |
-| 10 | Installs and enables the `cantomqtt` systemd service |
-| 11 | Creates the deployment directory structure at `~/` |
-| 12 | Generates TLS/SSL certificates using the Pi's hostname (10-year validity) |
+| 9 | Underclocks CPU to 600MHz, lowers active cooler fan threshold to 50°C, and disables unused hardware (GPU, HDMI, BT, WiFi, USB, audio) to reduce power consumption and heat — the CAN hat and NVME base block passive cooling so the active cooler and underclock are required |
+| 10 | Creates Python virtual environment at `~/local_code/cantomqtt` |
+| 11 | Installs and enables the `cantomqtt` systemd service |
+| 12 | Creates the deployment directory structure at `~/` |
+| 13 | Generates TLS/SSL certificates using the Pi's hostname (10-year validity) |
 
 ---
 

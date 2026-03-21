@@ -1,0 +1,33 @@
+# TrailCurrent CM5 Base Image Configuration
+#
+# Builds a headless Raspberry Pi OS Lite image for the Compute Module 5
+# with all base system dependencies pre-configured:
+#   - Docker CE + Compose plugin (data-root on NVMe)
+#   - CAN bus (MCP2515 on SPI0/CE0)
+#   - Power optimizations (underclocked, unused peripherals disabled)
+#   - NVMe auto-partition/format/mount on first boot
+#   - System packages for TrailCurrent runtime
+#   - First-boot service for per-device setup (NVMe, EEPROM, TLS certs, venv)
+#
+# Storage layout:
+#   eMMC  -> OS, packages, Docker engine, deployment scripts
+#   NVMe  -> Docker images/volumes, map tiles, database, app data
+#
+# Does NOT include the application stack (containers, Node-RED flows, etc.)
+# Those are deployed separately via deploy.sh.
+
+include:
+  file: bookworm-minbase.yaml
+
+device:
+  layer: rpi-cm5
+  hostname: headwaters
+
+image:
+  name: trailcurrent-cm5-base
+  boot_part_size: 200%
+  # eMMC only needs room for OS + packages + Docker engine (no images/data)
+  root_part_size: 300%
+
+layer:
+  base: trailcurrent-base
