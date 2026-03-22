@@ -263,6 +263,11 @@ class API {
         return this.request('/health');
     }
 
+    // Plateau calibration save
+    static async saveCalibration() {
+        return this.request('/plateau/save-calibration', { method: 'POST' });
+    }
+
     // OTA trigger
     static async triggerOta(hostname) {
         return this.request('/ota/trigger', {

@@ -20,6 +20,7 @@ const airqualityRoutes = require('./routes/airquality');
 const systemConfigRoutes = require('./routes/system-config');
 const modulesRoutes = require('./routes/modules');
 const otaRoutes = require('./routes/ota');
+const plateauRoutes = require('./routes/plateau');
 
 const app = express();
 const server = http.createServer(app);
@@ -64,6 +65,7 @@ async function startServer() {
         app.use('/api/system-config', systemConfigRoutes(db));
         app.use('/api/modules', modulesRoutes(db));
         app.use('/api/ota', otaRoutes(db));
+        app.use('/api/plateau', plateauRoutes(db));
 
         // Error handling middleware
         app.use((err, req, res, next) => {

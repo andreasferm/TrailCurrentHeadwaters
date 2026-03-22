@@ -657,6 +657,22 @@ class MqttService {
         return this.publishCanMessage(0x20, dataBytes);
     }
 
+    /**
+     * Send calibration save command to Plateau via CAN bus (CAN ID 0x20, subcmd 0x03)
+     * Plateau will save current BNO055 offsets to NVS, verify the write,
+     * then switch to ACCONLY mode and respond with an updated status message.
+     * @returns {boolean} Success status
+     */
+    publishPlateauCalibrationSave() {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish calibration save');
+            return false;
+        }
+
+        console.log('[Plateau] Sending calibration save command');
+        return this.publishCanMessage(0x20, [0x03]);
+    }
+
     // Handle cloud reconnect trigger — re-publish config snapshot
     async handleConfigSyncTrigger() {
         try {

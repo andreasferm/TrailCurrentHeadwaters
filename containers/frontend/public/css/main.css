@@ -1030,6 +1030,22 @@ body {
     text-align: center;
 }
 
+.plateau-save-btn {
+    display: block;
+    margin: 12px auto 0;
+    padding: 8px 24px;
+    border: none;
+    border-radius: 6px;
+    background: var(--accent, #4a9eff);
+    color: #fff;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.plateau-save-btn:hover {
+    opacity: 0.85;
+}
+
 /* Energy display */
 .energy-container {
     display: flex;
