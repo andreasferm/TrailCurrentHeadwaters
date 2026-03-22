@@ -4,7 +4,6 @@
 // and boots directly into ACCONLY on all subsequent power cycles.
 import { wsClient, API } from '../api.js';
 
-const CAL_LABELS = ['Not Calibrated', 'Starting', 'Calibrating', 'Calibrated'];
 const MOUNT_LABELS = ['Floor', 'Left Wall', 'Right Wall'];
 
 export class PlateauStatus {
@@ -13,7 +12,6 @@ export class PlateauStatus {
         this.data = {
             imu_connected: null,
             fully_calibrated: null,
-            cal_accel: null,
             mounting: null
         };
         this.saving = false;
@@ -44,41 +42,29 @@ export class PlateauStatus {
         if (this.data.imu_connected == null) return 'Waiting for Plateau...';
         if (!this.data.imu_connected) return 'IMU Disconnected';
         if (this.data.fully_calibrated) return 'Leveling Active';
-        if (this.saving) return 'Saving calibration...';
-        if (this.data.cal_accel === 3) return 'Calibration ready';
-        return 'Initial Calibration — Keep the vehicle still';
+        if (this.saving) return 'Saving...';
+        return 'One-Time Sensor Setup';
     }
 
     getSummaryClass() {
         if (this.data.imu_connected == null) return '';
         if (!this.data.imu_connected) return 'cal-none';
         if (this.data.fully_calibrated) return 'cal-good';
-        if (this.data.cal_accel === 3) return 'cal-good';
         return 'cal-partial';
     }
 
     renderCalSection() {
         if (!this.data.imu_connected || this.data.fully_calibrated) return '';
 
-        const accelLabel = CAL_LABELS[this.data.cal_accel] || '-';
-        const accelClass = this.data.cal_accel === 3 ? 'cal-good'
-                         : this.data.cal_accel >= 1 ? 'cal-partial'
-                         : 'cal-none';
+        if (this.saving) return '';
 
-        let html = `
-            <div class="plateau-cal-grid">
-                <div class="plateau-cal-item">
-                    <span class="plateau-cal-label">Accelerometer</span>
-                    <span class="plateau-cal-value ${accelClass}">${accelLabel}</span>
-                </div>
-            </div>
+        return `
+            <p class="plateau-setup-text">
+                Verify the leveling readings above look reasonable, then
+                complete setup. This only needs to be done once.
+            </p>
+            <button class="plateau-save-btn" id="plateau-save-cal">Complete Setup</button>
         `;
-
-        if (this.data.cal_accel === 3 && !this.saving) {
-            html += `<button class="plateau-save-btn" id="plateau-save-cal">Save Calibration</button>`;
-        }
-
-        return html;
     }
 
     async handleSave() {
@@ -117,7 +103,6 @@ export class PlateauStatus {
         this.data = {
             imu_connected: null,
             fully_calibrated: null,
-            cal_accel: null,
             mounting: null
         };
         this.saving = false;
