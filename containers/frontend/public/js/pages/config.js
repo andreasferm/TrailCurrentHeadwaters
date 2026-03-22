@@ -8,6 +8,12 @@ let moduleTypes = [];
 let editingModule = null;
 let isToggleInProgress = false;
 let configContainerClickListener = null;
+let formSubmitListener = null;
+let addBtnListener = null;
+let closeBtnListener = null;
+let cancelBtnListener = null;
+let backdropListener = null;
+let typeChangeListener = null;
 
 export const configPage = {
     render() {
@@ -470,18 +476,18 @@ export const configPage = {
         // Add module button
         const addBtn = document.getElementById('add-module-btn');
         if (addBtn) {
-            addBtn.addEventListener('click', () => this.showAddModuleModal());
+            if (addBtnListener) addBtn.removeEventListener('click', addBtnListener);
+            addBtnListener = () => this.showAddModuleModal();
+            addBtn.addEventListener('click', addBtnListener);
         }
 
         // Module card actions - remove old listener before adding new one
         const configEl = document.getElementById('config-container');
         if (configEl) {
-            // Remove old listener if it exists
             if (configContainerClickListener) {
                 configEl.removeEventListener('click', configContainerClickListener);
             }
 
-            // Create and store new listener
             configContainerClickListener = (e) => {
                 const btn = e.target.closest('[data-action]');
                 if (!btn) return;
@@ -511,30 +517,40 @@ export const configPage = {
         // Module type change — toggle between JSON config and PDM channels UI
         const typeSelect = document.getElementById('module-type');
         if (typeSelect) {
-            typeSelect.addEventListener('change', () => this.togglePdmChannelsUI(typeSelect.value));
+            if (typeChangeListener) typeSelect.removeEventListener('change', typeChangeListener);
+            typeChangeListener = () => this.togglePdmChannelsUI(typeSelect.value);
+            typeSelect.addEventListener('change', typeChangeListener);
         }
 
         // Modal form
         const form = document.getElementById('module-form');
         if (form) {
-            form.addEventListener('submit', (e) => this.handleFormSubmit(e));
+            if (formSubmitListener) form.removeEventListener('submit', formSubmitListener);
+            formSubmitListener = (e) => this.handleFormSubmit(e);
+            form.addEventListener('submit', formSubmitListener);
         }
 
         // Modal close buttons
         const closeBtn = document.getElementById('modal-close-btn');
         if (closeBtn) {
-            closeBtn.addEventListener('click', () => this.closeModal());
+            if (closeBtnListener) closeBtn.removeEventListener('click', closeBtnListener);
+            closeBtnListener = () => this.closeModal();
+            closeBtn.addEventListener('click', closeBtnListener);
         }
 
         const cancelBtn = document.getElementById('modal-cancel-btn');
         if (cancelBtn) {
-            cancelBtn.addEventListener('click', () => this.closeModal());
+            if (cancelBtnListener) cancelBtn.removeEventListener('click', cancelBtnListener);
+            cancelBtnListener = () => this.closeModal();
+            cancelBtn.addEventListener('click', cancelBtnListener);
         }
 
         // Modal backdrop click
         const backdrop = document.getElementById('modal-backdrop');
         if (backdrop) {
-            backdrop.addEventListener('click', () => this.closeModal());
+            if (backdropListener) backdrop.removeEventListener('click', backdropListener);
+            backdropListener = () => this.closeModal();
+            backdrop.addEventListener('click', backdropListener);
         }
     },
 
