@@ -41,9 +41,10 @@ firmware/
 trailcurrent-deployment*.zip
 trailcurrent-deployment-staging/
 
-# CM5 build artifacts (cloned repos and generated images)
+# CM5 build artifacts (cloned repos, generated images, splash screen)
 CM5/usbboot/
 CM5/rpi-image-gen/
+CM5/image/splash/
 
 # Build and log files
 *.log

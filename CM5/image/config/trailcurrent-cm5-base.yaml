@@ -32,3 +32,11 @@ image:
 
 layer:
   base: trailcurrent-base
+  splash: rpi-splash-screen
+
+# Boot splash screen — replaces Raspberry Pi logo with TrailCurrent branding.
+# Generate the TGA file first:  cd CM5/image && ./generate-splash.sh
+splash:
+  image_path: splash/trailcurrent-splash.tga
+  skip_image_checks: n
+  update_cmdline: y
