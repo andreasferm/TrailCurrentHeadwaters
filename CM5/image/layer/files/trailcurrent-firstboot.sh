@@ -87,37 +87,92 @@ log "Generating TLS/SSL certificates..."
 
 KEYS_DIR="$TC_HOME/data/keys"
 TLS_HOSTNAME="$(hostname).local"
-VALIDITY_DAYS=3650
+CA_VALIDITY_DAYS=3650
+SERVER_VALIDITY_DAYS=825      # Apple requires server certs <= 825 days
 
 if [ -f "$KEYS_DIR/server.crt" ] && [ -f "$KEYS_DIR/server.key" ]; then
     log "  Certificates already exist, skipping"
 else
+    # Detect local network IPs for SAN list
+    LOCAL_IPS=""
+    if command -v hostname >/dev/null 2>&1; then
+        LOCAL_IPS=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.' | grep -v '^127\.' || true)
+    fi
+    SAN_LIST="DNS:$TLS_HOSTNAME,IP:127.0.0.1,IP:::1"
+    if [ -n "$LOCAL_IPS" ]; then
+        while IFS= read -r ip; do
+            [ -n "$ip" ] && SAN_LIST="$SAN_LIST,IP:$ip"
+        done <<< "$LOCAL_IPS"
+    fi
+
+    # CA config file (config file approach works on all OpenSSL versions)
+    cat > "$KEYS_DIR/_ca.cnf" <<'CAEOF'
+[req]
+distinguished_name = req_dn
+x509_extensions = v3_ca
+prompt = no
+
+[req_dn]
+C = US
+ST = State
+L = City
+O = TrailCurrent
+OU = Engineering
+CN = TrailCurrent-CA
+
+[v3_ca]
+basicConstraints = critical, CA:true
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+CAEOF
+
     # CA key + cert
     openssl genrsa -out "$KEYS_DIR/ca.key" 2048 2>/dev/null
-    openssl req -new -x509 -days $VALIDITY_DAYS \
+    openssl req -new -x509 -days $CA_VALIDITY_DAYS \
         -key "$KEYS_DIR/ca.key" \
         -out "$KEYS_DIR/ca.crt" \
-        -subj "/C=US/ST=State/L=City/O=TrailCurrent/OU=Engineering/CN=TrailCurrent-CA" 2>/dev/null
+        -config "$KEYS_DIR/_ca.cnf"
     cp "$KEYS_DIR/ca.crt" "$KEYS_DIR/ca.pem"
+
+    # Server extension config file
+    cat > "$KEYS_DIR/_server.cnf" <<SRVEOF
+[req]
+distinguished_name = req_dn
+req_extensions = v3_server
+prompt = no
+
+[req_dn]
+C = US
+ST = State
+L = City
+O = TrailCurrent
+OU = Engineering
+CN = $TLS_HOSTNAME
+
+[v3_server]
+basicConstraints = critical, CA:false
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = $SAN_LIST
+SRVEOF
 
     # Server key + CSR + signed cert
     openssl genrsa -out "$KEYS_DIR/server.key" 2048 2>/dev/null
-    SAN_LIST="DNS:$TLS_HOSTNAME,IP:127.0.0.1,IP:::1"
     openssl req -new \
         -key "$KEYS_DIR/server.key" \
         -out "$KEYS_DIR/server.csr" \
-        -subj "/C=US/ST=State/L=City/O=TrailCurrent/OU=Engineering/CN=$TLS_HOSTNAME" \
-        -addext "subjectAltName=$SAN_LIST" 2>/dev/null
-    openssl x509 -req -days $VALIDITY_DAYS \
+        -config "$KEYS_DIR/_server.cnf"
+    openssl x509 -req -days $SERVER_VALIDITY_DAYS \
         -in "$KEYS_DIR/server.csr" \
         -CA "$KEYS_DIR/ca.crt" \
         -CAkey "$KEYS_DIR/ca.key" \
         -CAcreateserial \
         -out "$KEYS_DIR/server.crt" \
-        -copy_extensions copyall 2>/dev/null
+        -extfile "$KEYS_DIR/_server.cnf" \
+        -extensions v3_server
 
     # Clean up temp files and set permissions
-    rm -f "$KEYS_DIR/server.csr" "$KEYS_DIR/ca.srl"
+    rm -f "$KEYS_DIR/server.csr" "$KEYS_DIR/ca.srl" "$KEYS_DIR/_ca.cnf" "$KEYS_DIR/_server.cnf"
     chmod 644 "$KEYS_DIR"/*
     chown "$TC_USER:$TC_USER" "$KEYS_DIR"/*
 
