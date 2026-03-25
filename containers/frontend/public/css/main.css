@@ -1582,6 +1582,34 @@ body {
     cursor: not-allowed;
 }
 
+/* SMS settings */
+.sms-ssh-key-textarea {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.8rem;
+    resize: vertical;
+    min-height: 100px;
+    line-height: 1.4;
+    white-space: pre;
+}
+
+.sms-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.sms-test-btn {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 2px solid var(--border-color);
+}
+
+.sms-test-btn:hover:not(:disabled) {
+    border-color: var(--primary);
+    background: var(--bg-card);
+    box-shadow: none;
+}
+
 /* Settings action button */
 .settings-action-btn {
     display: flex;

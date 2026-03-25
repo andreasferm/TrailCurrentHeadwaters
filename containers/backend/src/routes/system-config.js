@@ -23,6 +23,10 @@ module.exports = (db) => {
                     cloud_mqtt_username: '',
                     cloud_mqtt_password: '',
                     cloud_api_key: '',
+                    sms_enabled: false,
+                    sms_phone_number: '',
+                    sms_router_ip: '',
+                    sms_ssh_key: '',
                     mcu_modules: [],
                     wifi_ssid: '',
                     wifi_password: '',
@@ -66,6 +70,18 @@ module.exports = (db) => {
                 data.cloud_api_key = '';
             }
 
+            // Decrypt SMS SSH key if it exists
+            if (data.sms_ssh_key_encrypted && data.sms_ssh_key_iv) {
+                try {
+                    data.sms_ssh_key = decrypt(data.sms_ssh_key_encrypted, data.sms_ssh_key_iv);
+                } catch (error) {
+                    console.error('Error decrypting SMS SSH key:', error);
+                    data.sms_ssh_key = '';
+                }
+            } else {
+                data.sms_ssh_key = '';
+            }
+
             // Remove encrypted fields from response
             delete data.wifi_password_encrypted;
             delete data.wifi_password_iv;
@@ -73,6 +89,8 @@ module.exports = (db) => {
             delete data.cloud_mqtt_password_iv;
             delete data.cloud_api_key_encrypted;
             delete data.cloud_api_key_iv;
+            delete data.sms_ssh_key_encrypted;
+            delete data.sms_ssh_key_iv;
 
             res.json(data);
         } catch (error) {
@@ -155,6 +173,46 @@ module.exports = (db) => {
                 } else {
                     updates.cloud_api_key_encrypted = '';
                     updates.cloud_api_key_iv = '';
+                }
+            }
+
+            if (req.body.sms_enabled !== undefined) {
+                if (typeof req.body.sms_enabled !== 'boolean') {
+                    return res.status(400).json({ error: 'sms_enabled must be a boolean' });
+                }
+                updates.sms_enabled = req.body.sms_enabled;
+            }
+
+            if (req.body.sms_phone_number !== undefined) {
+                if (typeof req.body.sms_phone_number !== 'string') {
+                    return res.status(400).json({ error: 'sms_phone_number must be a string' });
+                }
+                updates.sms_phone_number = req.body.sms_phone_number;
+            }
+
+            if (req.body.sms_router_ip !== undefined) {
+                if (typeof req.body.sms_router_ip !== 'string') {
+                    return res.status(400).json({ error: 'sms_router_ip must be a string' });
+                }
+                updates.sms_router_ip = req.body.sms_router_ip;
+            }
+
+            if (req.body.sms_ssh_key !== undefined) {
+                if (typeof req.body.sms_ssh_key !== 'string') {
+                    return res.status(400).json({ error: 'sms_ssh_key must be a string' });
+                }
+                if (req.body.sms_ssh_key) {
+                    try {
+                        const encrypted = encrypt(req.body.sms_ssh_key);
+                        updates.sms_ssh_key_encrypted = encrypted.encrypted;
+                        updates.sms_ssh_key_iv = encrypted.iv;
+                    } catch (error) {
+                        console.error('Error encrypting SMS SSH key:', error);
+                        return res.status(500).json({ error: 'Failed to encrypt SMS SSH key' });
+                    }
+                } else {
+                    updates.sms_ssh_key_encrypted = '';
+                    updates.sms_ssh_key_iv = '';
                 }
             }
 
@@ -349,6 +407,18 @@ module.exports = (db) => {
                 data.cloud_api_key = '';
             }
 
+            // Decrypt SMS SSH key for response
+            if (data.sms_ssh_key_encrypted && data.sms_ssh_key_iv) {
+                try {
+                    data.sms_ssh_key = decrypt(data.sms_ssh_key_encrypted, data.sms_ssh_key_iv);
+                } catch (error) {
+                    console.error('Error decrypting SMS SSH key:', error);
+                    data.sms_ssh_key = '';
+                }
+            } else {
+                data.sms_ssh_key = '';
+            }
+
             // Remove encrypted fields from response
             delete data.wifi_password_encrypted;
             delete data.wifi_password_iv;
@@ -356,6 +426,8 @@ module.exports = (db) => {
             delete data.cloud_mqtt_password_iv;
             delete data.cloud_api_key_encrypted;
             delete data.cloud_api_key_iv;
+            delete data.sms_ssh_key_encrypted;
+            delete data.sms_ssh_key_iv;
 
             res.json(data);
         } catch (error) {
@@ -377,6 +449,11 @@ module.exports = (db) => {
                 cloud_mqtt_password_iv: '',
                 cloud_api_key_encrypted: '',
                 cloud_api_key_iv: '',
+                sms_enabled: false,
+                sms_phone_number: '',
+                sms_router_ip: '',
+                sms_ssh_key_encrypted: '',
+                sms_ssh_key_iv: '',
                 mcu_modules: [],
                 wifi_ssid: '',
                 wifi_password_encrypted: '',
@@ -401,7 +478,8 @@ module.exports = (db) => {
                     ...resetConfig,
                     wifi_password: '',
                     cloud_mqtt_password: '',
-                    cloud_api_key: ''
+                    cloud_api_key: '',
+                    sms_ssh_key: ''
                 }
             });
         } catch (error) {

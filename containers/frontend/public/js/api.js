@@ -268,6 +268,14 @@ class API {
         return this.request('/plateau/save-calibration', { method: 'POST' });
     }
 
+    // SMS test
+    static async testSms(phone_number, router_ip, ssh_key) {
+        return this.request('/sms/test', {
+            method: 'POST',
+            body: JSON.stringify({ phone_number, router_ip, ssh_key })
+        });
+    }
+
     // OTA trigger
     static async triggerOta(hostname) {
         return this.request('/ota/trigger', {

@@ -85,6 +85,54 @@ export const settingsPage = {
                 </div>
             </div>
 
+            <!-- SMS Notifications -->
+            <div class="card settings-item-vertical">
+                <div class="settings-item-header">
+                    <span class="settings-label">SMS Notifications</span>
+                    <p class="settings-description">Send SMS notifications via your cellular router's sendsms command over SSH</p>
+                </div>
+                <div class="password-form">
+                    <div class="settings-item" style="padding: 0; border: none;">
+                        <div>
+                            <label class="settings-label" style="font-size: 0.9rem;">Enable SMS</label>
+                        </div>
+                        <button class="toggle-switch ${systemConfig?.sms_enabled ? 'active' : ''}"
+                                id="sms-enabled-toggle"
+                                aria-pressed="${systemConfig?.sms_enabled || false}">
+                        </button>
+                    </div>
+                    <div id="sms-config-fields" class="${!systemConfig?.sms_enabled ? 'hidden' : ''}" style="display: ${!systemConfig?.sms_enabled ? 'none' : 'flex'}; flex-direction: column; gap: 12px;">
+                        <div class="password-form-group">
+                            <label class="password-label" for="settings-sms-phone">Phone Number</label>
+                            <input type="tel" id="settings-sms-phone" class="password-input"
+                                   placeholder="+15551234567"
+                                   value="${systemConfig?.sms_phone_number || ''}">
+                        </div>
+                        <div class="password-form-group">
+                            <label class="password-label" for="settings-sms-router-ip">Router IP Address</label>
+                            <input type="text" id="settings-sms-router-ip" class="password-input"
+                                   placeholder="192.168.1.1"
+                                   value="${systemConfig?.sms_router_ip || ''}">
+                        </div>
+                        <div class="password-form-group">
+                            <label class="password-label" for="settings-sms-ssh-key">SSH Private Key</label>
+                            <textarea id="settings-sms-ssh-key" class="password-input sms-ssh-key-textarea"
+                                      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
+                                      rows="6">${systemConfig?.sms_ssh_key || ''}</textarea>
+                        </div>
+                        <div id="sms-config-message" class="password-message hidden"></div>
+                        <div class="sms-buttons">
+                            <button class="password-submit-btn" id="save-sms-config-btn">
+                                Save SMS Settings
+                            </button>
+                            <button class="password-submit-btn sms-test-btn" id="test-sms-btn">
+                                Send Test SMS
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- API Keys -->
             <div class="card settings-item-vertical">
                 <div class="settings-item-header">
@@ -222,6 +270,35 @@ export const settingsPage = {
                 if (cloudFields) {
                     cloudFields.classList.toggle('hidden', !isEnabled);
                 }
+            });
+        }
+
+        // SMS enabled toggle
+        const smsEnabledToggle = document.getElementById('sms-enabled-toggle');
+        if (smsEnabledToggle) {
+            smsEnabledToggle.addEventListener('click', () => {
+                const isEnabled = smsEnabledToggle.classList.toggle('active');
+                smsEnabledToggle.setAttribute('aria-pressed', isEnabled);
+                const smsFields = document.getElementById('sms-config-fields');
+                if (smsFields) {
+                    smsFields.style.display = isEnabled ? 'flex' : 'none';
+                }
+            });
+        }
+
+        // Save SMS config button
+        const saveSmsBtn = document.getElementById('save-sms-config-btn');
+        if (saveSmsBtn) {
+            saveSmsBtn.addEventListener('click', async () => {
+                await this.handleSaveSmsConfig();
+            });
+        }
+
+        // Test SMS button
+        const testSmsBtn = document.getElementById('test-sms-btn');
+        if (testSmsBtn) {
+            testSmsBtn.addEventListener('click', async () => {
+                await this.handleTestSms();
             });
         }
 
@@ -447,6 +524,92 @@ export const settingsPage = {
 
     showCloudConfigMessage(message, type) {
         const messageEl = document.getElementById('cloud-config-message');
+        if (messageEl) {
+            messageEl.textContent = message;
+            messageEl.classList.remove('hidden', 'success', 'error');
+            messageEl.classList.add(type);
+        }
+    },
+
+    async handleSaveSmsConfig() {
+        const messageEl = document.getElementById('sms-config-message');
+        const saveBtn = document.getElementById('save-sms-config-btn');
+        const smsEnabledToggle = document.getElementById('sms-enabled-toggle');
+
+        messageEl.classList.add('hidden');
+        messageEl.classList.remove('success', 'error');
+
+        const smsEnabled = smsEnabledToggle.classList.contains('active');
+        const smsPhoneNumber = document.getElementById('settings-sms-phone').value.trim();
+        const smsRouterIp = document.getElementById('settings-sms-router-ip').value.trim();
+        const smsSshKey = document.getElementById('settings-sms-ssh-key').value;
+
+        if (smsEnabled && !smsPhoneNumber) {
+            this.showSmsConfigMessage('Please enter a phone number', 'error');
+            return;
+        }
+
+        if (smsEnabled && !smsRouterIp) {
+            this.showSmsConfigMessage('Please enter the router IP address', 'error');
+            return;
+        }
+
+        if (smsEnabled && !smsSshKey) {
+            this.showSmsConfigMessage('Please paste the SSH private key', 'error');
+            return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+
+        try {
+            systemConfig = await API.updateSystemConfig({
+                sms_enabled: smsEnabled,
+                sms_phone_number: smsPhoneNumber,
+                sms_router_ip: smsRouterIp,
+                sms_ssh_key: smsSshKey
+            });
+            this.showSmsConfigMessage('SMS settings saved successfully', 'success');
+        } catch (error) {
+            this.showSmsConfigMessage(error.message || 'Failed to save SMS settings', 'error');
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save SMS Settings';
+        }
+    },
+
+    async handleTestSms() {
+        const messageEl = document.getElementById('sms-config-message');
+        const testBtn = document.getElementById('test-sms-btn');
+
+        messageEl.classList.add('hidden');
+        messageEl.classList.remove('success', 'error');
+
+        const phoneNumber = document.getElementById('settings-sms-phone').value.trim();
+        const routerIp = document.getElementById('settings-sms-router-ip').value.trim();
+        const sshKey = document.getElementById('settings-sms-ssh-key').value;
+
+        if (!phoneNumber || !routerIp || !sshKey) {
+            this.showSmsConfigMessage('Please fill in all SMS fields before testing', 'error');
+            return;
+        }
+
+        testBtn.disabled = true;
+        testBtn.textContent = 'Sending...';
+
+        try {
+            const result = await API.testSms(phoneNumber, routerIp, sshKey);
+            this.showSmsConfigMessage(result.output || 'Test SMS sent successfully', 'success');
+        } catch (error) {
+            this.showSmsConfigMessage(error.message || 'Failed to send test SMS', 'error');
+        } finally {
+            testBtn.disabled = false;
+            testBtn.textContent = 'Send Test SMS';
+        }
+    },
+
+    showSmsConfigMessage(message, type) {
+        const messageEl = document.getElementById('sms-config-message');
         if (messageEl) {
             messageEl.textContent = message;
             messageEl.classList.remove('hidden', 'success', 'error');
