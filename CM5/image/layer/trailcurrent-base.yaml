@@ -187,6 +187,9 @@ mmdebstrap:
       WantedBy=multi-user.target
       SVCEOF
 
+    # ── Console login banner (MOTD) ───────────────────────────────────
+    - install -m 644 "$SRCROOT/layer/files/motd" "$1/etc/motd"
+
     # ── Enable all services ──────────────────────────────────────────
     - $BDEBSTRAP_HOOKS/enable-units "$1" can0 disable-usb docker trailcurrent-firstboot cantomqtt deployment-watcher
 
