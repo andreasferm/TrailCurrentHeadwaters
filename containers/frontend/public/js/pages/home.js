@@ -35,12 +35,17 @@ export const homePage = {
         document.getElementById('thermostat-card').innerHTML = thermostat.render();
         await thermostat.init();
 
-        // Initialize lights
+        // Initialize lights (only show panel if modules provide lights)
         try {
             const lights = await API.getLights();
-            lightsGrid = new LightsGrid('lights-card');
-            document.getElementById('lights-card').innerHTML = lightsGrid.render(lights);
-            await lightsGrid.init(lights);
+            const lightsPanel = document.querySelector('.lights-panel');
+            if (lights.length === 0) {
+                if (lightsPanel) lightsPanel.style.display = 'none';
+            } else {
+                lightsGrid = new LightsGrid('lights-card');
+                document.getElementById('lights-card').innerHTML = lightsGrid.render(lights);
+                await lightsGrid.init(lights);
+            }
         } catch (error) {
             console.error('Failed to fetch lights:', error);
             document.getElementById('lights-card').innerHTML = '<p style="color: var(--danger);">Failed to load lights</p>';

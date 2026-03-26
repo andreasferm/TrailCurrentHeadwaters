@@ -46,6 +46,9 @@ export class LightsGrid {
 
     render(lights) {
         this.lights = lights;
+        if (lights.length === 0) {
+            return '';
+        }
         const anyOn = lights.some(l => l.state);
         return `
             <div class="lights-grid" id="lights-grid">
@@ -59,6 +62,7 @@ export class LightsGrid {
 
     async init(lights) {
         this.lights = lights;
+        if (lights.length === 0) return;
 
         // Initialize brightness modal
         brightnessModal.init();

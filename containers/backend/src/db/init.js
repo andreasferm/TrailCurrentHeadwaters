@@ -33,25 +33,13 @@ async function seedDatabase() {
         console.log('Seeded thermostat');
     }
 
-    // Seed lights
+    // Lights are managed dynamically by pdm-channel-sync and switchback-channel-sync.
+    // No seed data — lights only exist when a module is enabled.
+
+    // Migration: add icon and type fields if missing on legacy light entries
     const lights = db.collection('lights');
     const existingLights = await lights.countDocuments();
-    if (existingLights === 0) {
-        const lightNames = [
-            'Living Room', 'Kitchen', 'Bedroom', 'Bathroom',
-            'Exterior', 'Awning', 'Porch', 'Storage'
-        ];
-        const lightDocs = lightNames.map((name, index) => ({
-            _id: index + 1,
-            name,
-            icon: 'lightbulb',
-            type: 'light',
-            updated_at: new Date()
-        }));
-        await lights.insertMany(lightDocs);
-        console.log('Seeded lights');
-    } else {
-        // Migration: add icon and type fields if missing
+    if (existingLights > 0) {
         const sample = await lights.findOne({});
         if (sample && sample.icon === undefined) {
             await lights.updateMany(

@@ -25,12 +25,16 @@ async function syncPdmChannelsToLights(db, mqttService) {
         .filter(m => m.type === 'power_distribution_module' && m.enabled)
         .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''));
 
-    // If no PDMs configured, leave the existing lights collection as-is
-    if (pdms.length === 0) return;
-
     const lightsCollection = db.collection('lights');
     const allChannels = [];
     const validIds = new Set();
+
+    // No enabled PDMs — remove all PDM lights and exit
+    if (pdms.length === 0) {
+        await lightsCollection.deleteMany({ source: { $exists: false } });
+        console.log('[PDM Sync] No enabled PDMs — removed all PDM lights');
+        return;
+    }
 
     for (let pdmIndex = 0; pdmIndex < pdms.length; pdmIndex++) {
         const pdm = pdms[pdmIndex];
