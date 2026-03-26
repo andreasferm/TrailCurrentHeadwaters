@@ -286,7 +286,7 @@ class MqttService {
     }
 
     // Handle relay status update from Switchback module
-    // Maps relay channel (1-6) to light ID (101-106) for unified WebSocket broadcast
+    // Maps relay channel (1-8) to light ID (101-108) for unified WebSocket broadcast
     // Uses in-memory name cache to avoid DB queries on the 33ms hot path
     handleRelayStatus(relayId, payload) {
         const SWITCHBACK_ID_BASE = 100;
@@ -329,7 +329,7 @@ class MqttService {
         return true;
     }
 
-    // Publish relay all on/off command — routes to CAN ID 0x25 [6, state] via Node-RED
+    // Publish relay all on/off command — routes to CAN ID 0x25 [0xFF, state] via Node-RED
     publishRelayAllCommand(state) {
         if (!this.connected) {
             console.warn('MQTT not connected, cannot publish relay all command');

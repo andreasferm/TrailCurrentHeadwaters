@@ -16,6 +16,7 @@ const MCU_MODULES = [
     'power_distribution_module',
     'seven_pin_trailer_monitor',
     'shunt_gateway',
+    'switchback_relay',
     'vehicle_leveler',
     'wall_mounted_display'
 ];
@@ -32,6 +33,7 @@ const MODULE_DISPLAY_NAMES = {
     'power_distribution_module': 'Power Distribution Module',
     'seven_pin_trailer_monitor': 'Seven Pin Trailer Monitor',
     'shunt_gateway': 'Shunt Gateway',
+    'switchback_relay': 'Switchback Relay',
     'vehicle_leveler': 'Vehicle Leveler',
     'wall_mounted_display': 'Wall Mounted Display'
 };

@@ -1,11 +1,11 @@
 const DEFAULT_CHANNEL_NAMES = [
-    'Relay 1', 'Relay 2', 'Relay 3', 'Relay 4', 'Relay 5', 'Relay 6'
+    'Relay 1', 'Relay 2', 'Relay 3', 'Relay 4', 'Relay 5', 'Relay 6', 'Relay 7', 'Relay 8'
 ];
 
 // Base ID offset for Switchback relay entries in the lights collection.
 // PDM lights use IDs 1-8 (per PDM), so 100+ avoids collisions.
 const SWITCHBACK_ID_BASE = 100;
-const CHANNELS_PER_MODULE = 6;
+const CHANNELS_PER_MODULE = 8;
 
 function getDefaultChannels() {
     return DEFAULT_CHANNEL_NAMES.map((name, i) => ({
@@ -35,7 +35,9 @@ async function syncSwitchbackChannelsToLights(db, mqttService) {
 
     for (let sbIndex = 0; sbIndex < switchbacks.length; sbIndex++) {
         const sb = switchbacks[sbIndex];
-        const channels = sb.config?.channels || getDefaultChannels();
+        const saved = sb.config?.channels || [];
+        const defaults = getDefaultChannels();
+        const channels = defaults.map((def, i) => saved[i] || def);
 
         for (const ch of channels) {
             const lightId = SWITCHBACK_ID_BASE + (sbIndex * CHANNELS_PER_MODULE) + ch.channel;

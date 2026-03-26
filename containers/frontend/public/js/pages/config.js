@@ -603,7 +603,9 @@ export const configPage = {
             this.togglePdmChannelsUI('power_distribution_module');
             this.renderChannelRows(channels, 'power_distribution_module');
         } else if (module.type === 'switchback_relay') {
-            const channels = module.config?.channels || this.getSwitchbackDefaultChannels();
+            const saved = module.config?.channels || [];
+            const defaults = this.getSwitchbackDefaultChannels();
+            const channels = defaults.map((def, i) => saved[i] || def);
             this.togglePdmChannelsUI('switchback_relay');
             this.renderChannelRows(channels, 'switchback_relay');
         } else if (module.type === 'vehicle_leveler') {
@@ -968,7 +970,7 @@ export const configPage = {
     },
 
     getSwitchbackDefaultChannels() {
-        return Array.from({ length: 6 }, (_, i) => ({
+        return Array.from({ length: 8 }, (_, i) => ({
             channel: i + 1,
             name: `Relay ${i + 1}`,
             icon: 'power-outlet',

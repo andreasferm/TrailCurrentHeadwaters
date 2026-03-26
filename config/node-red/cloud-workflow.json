@@ -2306,7 +2306,7 @@
         "type": "comment",
         "z": "cloud_workflow_tab_01",
         "name": "Cloud \u2192 Local: Relay Commands (rv/relays/N/command \u2192 CAN 0x025 outbound)",
-        "info": "Receives relay toggle commands from the cloud broker and converts them to CAN bus messages sent to can/outbound on the local broker.\nIndividual toggles use CAN ID 0x025 with channel index.\nAll on/off uses CAN ID 0x025 with data[0]=6, data[1]=state.",
+        "info": "Receives relay toggle commands from the cloud broker and converts them to CAN bus messages sent to can/outbound on the local broker.\nIndividual toggles use CAN ID 0x025 with channel index.\nAll on/off uses CAN ID 0x025 with data[0]=0xFF, data[1]=state.",
         "x": 310,
         "y": 1820,
         "wires": []
@@ -2576,6 +2576,88 @@
         ]
     },
     {
+        "id": "cloud_relay_cmd_in_7",
+        "type": "mqtt in",
+        "z": "cloud_workflow_tab_01",
+        "name": "Cloud Relay7Cmd",
+        "topic": "rv/relays/7/command",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "cloud_mqtt_broker_01",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 160,
+        "y": 2160,
+        "wires": [
+            [
+                "cloud_relay_cmd_fn_7"
+            ]
+        ]
+    },
+    {
+        "id": "cloud_relay_cmd_fn_7",
+        "type": "function",
+        "z": "cloud_workflow_tab_01",
+        "name": "Relay7Toggle",
+        "func": "msg.payload = {\n    \"identifier\": \"0x025\",\n    \"data_length_code\": 1,\n    \"data\": [\n        [0,0,0,0,0,1,1,0]\n    ],\n    \"extd\": false,\n    \"rtr\": false,\n    \"ss\": 0,\n    \"self\": 0\n}\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 350,
+        "y": 2160,
+        "wires": [
+            [
+                "cloud_relay_cmd_out_1"
+            ]
+        ]
+    },
+    {
+        "id": "cloud_relay_cmd_in_8",
+        "type": "mqtt in",
+        "z": "cloud_workflow_tab_01",
+        "name": "Cloud Relay8Cmd",
+        "topic": "rv/relays/8/command",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "cloud_mqtt_broker_01",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 160,
+        "y": 2210,
+        "wires": [
+            [
+                "cloud_relay_cmd_fn_8"
+            ]
+        ]
+    },
+    {
+        "id": "cloud_relay_cmd_fn_8",
+        "type": "function",
+        "z": "cloud_workflow_tab_01",
+        "name": "Relay8Toggle",
+        "func": "msg.payload = {\n    \"identifier\": \"0x025\",\n    \"data_length_code\": 1,\n    \"data\": [\n        [0,0,0,0,0,1,1,1]\n    ],\n    \"extd\": false,\n    \"rtr\": false,\n    \"ss\": 0,\n    \"self\": 0\n}\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 350,
+        "y": 2210,
+        "wires": [
+            [
+                "cloud_relay_cmd_out_1"
+            ]
+        ]
+    },
+    {
         "id": "cloud_relay_cmd_in_all",
         "type": "mqtt in",
         "z": "cloud_workflow_tab_01",
@@ -2589,7 +2671,7 @@
         "rh": 0,
         "inputs": 0,
         "x": 160,
-        "y": 2180,
+        "y": 2280,
         "wires": [
             [
                 "cloud_relay_cmd_fn_all"
@@ -2601,7 +2683,7 @@
         "type": "function",
         "z": "cloud_workflow_tab_01",
         "name": "RelayAllOnOff",
-        "func": "var state = msg.payload.state || 0;\nmsg.payload = {\n    \"identifier\": \"0x025\",\n    \"data_length_code\": 2,\n    \"data\": [\n        [0,0,0,0,0,1,1,0],\n        [0,0,0,0,0,0,0, state ? 1 : 0]\n    ],\n    \"extd\": false,\n    \"rtr\": false,\n    \"ss\": 0,\n    \"self\": 0\n}\nreturn msg;",
+        "func": "var state = msg.payload.state || 0;\nmsg.payload = {\n    \"identifier\": \"0x025\",\n    \"data_length_code\": 2,\n    \"data\": [\n        [1,1,1,1,1,1,1,1],\n        [0,0,0,0,0,0,0, state ? 1 : 0]\n    ],\n    \"extd\": false,\n    \"rtr\": false,\n    \"ss\": 0,\n    \"self\": 0\n}\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -2609,7 +2691,7 @@
         "finalize": "",
         "libs": [],
         "x": 360,
-        "y": 2180,
+        "y": 2280,
         "wires": [
             [
                 "cloud_relay_cmd_out_1"
@@ -3008,6 +3090,134 @@
         "broker": "cloud_mqtt_broker_01",
         "x": 560,
         "y": 2530,
+        "wires": []
+    },
+    {
+        "id": "cloud_relay_sts_in_7",
+        "type": "mqtt in",
+        "z": "cloud_workflow_tab_01",
+        "name": "LocalRelay7Sts",
+        "topic": "local/relays/7/status",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "116a81d49537d25e",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 160,
+        "y": 2580,
+        "wires": [
+            [
+                "cloud_relay_sts_rl_7"
+            ]
+        ]
+    },
+    {
+        "id": "cloud_relay_sts_rl_7",
+        "type": "delay",
+        "z": "cloud_workflow_tab_01",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "30",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": true,
+        "allowrate": "",
+        "outputs": 1,
+        "x": 350,
+        "y": 2580,
+        "wires": [
+            [
+                "cloud_relay_sts_out_7"
+            ]
+        ]
+    },
+    {
+        "id": "cloud_relay_sts_out_7",
+        "type": "mqtt out",
+        "z": "cloud_workflow_tab_01",
+        "name": "Cloud Relay7Status",
+        "topic": "rv/relays/7/status",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "cloud_mqtt_broker_01",
+        "x": 560,
+        "y": 2580,
+        "wires": []
+    },
+    {
+        "id": "cloud_relay_sts_in_8",
+        "type": "mqtt in",
+        "z": "cloud_workflow_tab_01",
+        "name": "LocalRelay8Sts",
+        "topic": "local/relays/8/status",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "116a81d49537d25e",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 160,
+        "y": 2630,
+        "wires": [
+            [
+                "cloud_relay_sts_rl_8"
+            ]
+        ]
+    },
+    {
+        "id": "cloud_relay_sts_rl_8",
+        "type": "delay",
+        "z": "cloud_workflow_tab_01",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "30",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": true,
+        "allowrate": "",
+        "outputs": 1,
+        "x": 350,
+        "y": 2630,
+        "wires": [
+            [
+                "cloud_relay_sts_out_8"
+            ]
+        ]
+    },
+    {
+        "id": "cloud_relay_sts_out_8",
+        "type": "mqtt out",
+        "z": "cloud_workflow_tab_01",
+        "name": "Cloud Relay8Status",
+        "topic": "rv/relays/8/status",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "cloud_mqtt_broker_01",
+        "x": 560,
+        "y": 2630,
         "wires": []
     },
     {
