@@ -1,4 +1,0 @@
-(fp_lib_table
-  (version 7)
-  (lib (name "TrailCurrentFootprints")(type "KiCad")(uri "${TRAILCURRENT_LIB_DIR}/footprints/TrailCurrentFootprints.pretty")(options "")(descr "TrailCurrent custom footprints"))
-)
