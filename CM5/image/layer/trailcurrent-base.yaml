@@ -54,9 +54,9 @@ mmdebstrap:
     - |
       cat >> "$1/boot/firmware/config.txt" << 'CFGEOF'
 
-      # ── TrailCurrent CAN bus (MCP2515 on SPI0/CE0, 12MHz xtal, GPIO25 INT) ──
+      # ── CAN bus (MCP2515 on SPI0/CE0, 16MHz xtal, GPIO25 INT) ──
       dtparam=spi=on
-      dtoverlay=mcp2515-can0,oscillator=12000000,interrupt=25,spimaxfrequency=2000000
+      dtoverlay=mcp2515-can0,oscillator=16000000,interrupt=25,spimaxfrequency=1000000
 
       # ── Power savings: disable unused peripherals ──
       dtoverlay=disable-bt

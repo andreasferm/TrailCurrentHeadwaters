@@ -13,7 +13,7 @@ the steps in order with no gaps.
     — only needed for CM5 with eMMC; CM5 Lite enters USB boot automatically
   - NVMe M.2 slot (M-key or B+M-key)
 - NVMe SSD (128 GB+ recommended) — this is the boot and root drive
-- TrailCurrent CAN Hat (MCP2515, SPI0/CE0, 12 MHz crystal, GPIO25 interrupt)
+- Waveshare RS485 CAN HAT (B) (MCP2515, SPI0/CE0, 16 MHz crystal, GPIO25 interrupt)
 - Ethernet connection
 - A Linux computer for building and flashing (Debian/Ubuntu, arm64 or x86_64)
 
@@ -189,7 +189,7 @@ sudo dd if=/dev/zero of=/dev/sdY bs=4M count=100 status=progress conv=fsync
 This zeros the first 400 MB, which destroys partition tables, boot sectors,
 and filesystem headers.
 
-**Power cycle the carrier board** before the next step.
+**Power cycle the carrier board** before the next step. **Be sure to hold the boot button again when plugging in**
 
 ### Step 4: Flash the NVMe
 
@@ -218,7 +218,7 @@ Unmount any auto-mounted partitions, then write the image:
 
 ```bash
 sudo umount /dev/sdX* 2>/dev/null
-
+#cd to root of project
 sudo dd if=CM5/rpi-image-gen/work/image-trailcurrent-cm5-base/trailcurrent-cm5-base.img \
     of=/dev/sdX bs=4M status=progress conv=fsync
 ```

@@ -10,14 +10,14 @@ Dockerized edge gateway with MQTT broker, tile server, and local dashboards. Par
 |--------------|---------|
 | Set up a development environment | [Development Setup](#development-setup) below |
 | Build a deployment package | [Building Deployment Packages](#building-deployment-packages) below |
-| Set up a new Raspberry Pi | [DOCS/RaspberryPiOneTimeSetup.md](DOCS/RaspberryPiOneTimeSetup.md) |
-| Deploy or update a Pi | [PI_DEPLOYMENT.md](PI_DEPLOYMENT.md) |
+| Set up a new CM5 device | [CM5/SETUP.md](CM5/SETUP.md) |
+| Deploy or update a device | [PI_DEPLOYMENT.md](PI_DEPLOYMENT.md) |
 | Set up Node-RED flows | [Node-RED Setup](#node-red-setup) below |
 | Understand cloud OTA updates | [OTA_DEPLOYMENT_IMPLEMENTATION.md](OTA_DEPLOYMENT_IMPLEMENTATION.md#cloud-to-pi-ota-deployment-deployment-watcher) |
 
 ## Prerequisites
 
-- **Hardware:** [Raspberry Pi 5](https://www.waveshare.com/raspberry-pi-5.htm?aff_id=Trailcurrent) — selected for its industry-standard form factor and well-documented ecosystem, with plenty of headroom for additional expansion in the future
+- **Hardware:** Raspberry Pi Compute Module 5 (CM5) on a standard carrier board with Waveshare RS485 CAN HAT (B) — no custom components or soldering required. The CM5 + carrier board replaces the previous Pi 5 + NVME Base + custom CAN HAT stack: it's more compact, more readily available, cheaper, and can be fully assembled from off-the-shelf parts.
 - **Docker Engine** (or Docker Desktop) with the `compose` plugin and `buildx`
 - **Git**
 
@@ -138,7 +138,7 @@ curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/fonts/Noto%20Sans%
 
 ## Building Deployment Packages
 
-For creating the offline zip that gets deployed to Raspberry Pis. The deployment pipeline builds Docker images for ARM64, packages them as tar files, and creates a self-contained zip.
+For creating the offline zip that gets deployed to CM5 devices. The deployment pipeline builds Docker images for ARM64, packages them as tar files, and creates a self-contained zip.
 
 ```bash
 # Build everything and create the zip
@@ -151,10 +151,10 @@ This will:
 3. Fetch MCU firmware from GitHub releases (if available)
 4. Package everything into `trailcurrent-deployment-1.0.0.zip`
 
-**Transfer and deploy to Pi:**
+**Transfer and deploy to device:**
 ```bash
-scp trailcurrent-deployment-1.0.0.zip trailcurrent@pi.local:~
-# On the Pi:
+scp trailcurrent-deployment-1.0.0.zip trailcurrent@trailcurrent01.local:~
+# On the device:
 unzip trailcurrent-deployment-1.0.0.zip && chmod +x deploy.sh && ./deploy.sh
 ```
 

@@ -1,10 +1,10 @@
-# Raspberry Pi Deployment Guide
+# TrailCurrent Deployment Guide
 
 ## Overview
 
-This document describes how to deploy TrailCurrent to a Raspberry Pi using the offline deployment package. The system uses pre-built Docker images bundled into a zip file — no internet access is required on the Pi after initial OS setup.
+This document describes how to deploy TrailCurrent to a CM5 device using the offline deployment package. The system uses pre-built Docker images bundled into a zip file — no internet access is required on the device after the initial image is flashed.
 
-For initial device setup (OS, Docker, CAN bus), see [DOCS/PiSetup.md](DOCS/PiSetup.md).
+For initial device setup (flashing the CM5 image), see [CM5/SETUP.md](CM5/SETUP.md).
 
 ---
 
@@ -33,7 +33,7 @@ This produces `trailcurrent-deployment-1.0.0.zip` containing:
 
 ### Prerequisites
 
-- Raspberry Pi with Docker installed (see [DOCS/PiSetup.md](DOCS/PiSetup.md))
+- CM5 device with the TrailCurrent image flashed (see [CM5/SETUP.md](CM5/SETUP.md))
 - SSH access to the Pi
 - `jq` installed (`sudo apt install jq`) — needed for OTA firmware deployment
 - Map tiles file (`map.mbtiles`) transferred separately (~25GB)
@@ -272,7 +272,7 @@ ping trailcurrent01.local
 
 ## Reference
 
-- **Initial Pi Setup**: [DOCS/PiSetup.md](DOCS/PiSetup.md)
+- **Initial Device Setup**: [CM5/SETUP.md](CM5/SETUP.md)
 - **Firmware Integration**: [FIRMWARE_SETUP.md](FIRMWARE_SETUP.md)
 - **OTA System Details**: [OTA_DEPLOYMENT_IMPLEMENTATION.md](OTA_DEPLOYMENT_IMPLEMENTATION.md) (includes MCU firmware OTA and cloud-to-Pi deployment watcher)
 - **Development**: [README.md](README.md)

@@ -28,7 +28,6 @@ Vagrantfile
 containers/node-red/node-red-data
 **/*.venv
 data/
-EDA/Pi5CanAndBuckHat/backups/
 **/*.env
 containers/nodejs/node_modules
 containers/tileserver/data/
