@@ -6,37 +6,23 @@ let currentStep = 1;
 let step2ListenersAttached = false;
 
 const MCU_MODULES = [
-    'air_quality_module',
-    'cabinet_and_door_sensor',
-    'can_esp_now_gateway',
-    'eight_button_panel',
-    'electric_heater_control',
-    'gnss_module',
-    'mppt_can_gateway',
-    'power_distribution_module',
-    'seven_pin_trailer_monitor',
-    'shunt_gateway',
-    'switchback_relay',
-    'vehicle_leveler',
-    'wall_mounted_display'
+    { id: 'fireside', name: 'Fireside' },
+    { id: 'spotter', name: 'Spotter' },
+    { id: 'milepost', name: 'Milepost' },
+    { id: 'solstice', name: 'Solstice' },
+    { id: 'ampline', name: 'Ampline' },
+    { id: 'torrent', name: 'Torrent' },
+    { id: 'tapper', name: 'Tapper' },
+    { id: 'resivoir', name: 'Resivoir' },
+    { id: 'borealis', name: 'Borealis' },
+    { id: 'aftline', name: 'Aftline' },
+    { id: 'picket', name: 'Picket' },
+    { id: 'bearing', name: 'Bearing' },
+    { id: 'therma', name: 'Therma' }
 ];
 
-// Map snake_case module values to friendly display names
-const MODULE_DISPLAY_NAMES = {
-    'air_quality_module': 'Air Quality Sensor',
-    'cabinet_and_door_sensor': 'Cabinet/Door Sensor',
-    'can_esp_now_gateway': 'CAN ESP-NOW Gateway',
-    'eight_button_panel': 'Eight Button Panel',
-    'electric_heater_control': 'Electric Heater Control',
-    'gnss_module': 'GPS Module',
-    'mppt_can_gateway': 'MPPT CAN Gateway',
-    'power_distribution_module': 'Power Distribution Module',
-    'seven_pin_trailer_monitor': 'Seven Pin Trailer Monitor',
-    'shunt_gateway': 'Shunt Gateway',
-    'switchback_relay': 'Switchback Relay',
-    'vehicle_leveler': 'Vehicle Leveler',
-    'wall_mounted_display': 'Wall Mounted Display'
-};
+// Build display name lookup from the module list
+const MODULE_DISPLAY_NAMES = Object.fromEntries(MCU_MODULES.map(m => [m.id, m.name]));
 
 export const wizardPage = {
     render() {
@@ -207,7 +193,7 @@ export const wizardPage = {
                         <label class="wizard-label" for="module-type">Module Type</label>
                         <select id="module-type" class="wizard-input">
                             <option value="">-- Select a module type --</option>
-                            ${MCU_MODULES.map(module => `<option value="${module}">${MODULE_DISPLAY_NAMES[module]}</option>`).join('')}
+                            ${MCU_MODULES.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
                         </select>
                         <div id="module-type-error" class="wizard-error hidden"></div>
                     </div>

@@ -22,7 +22,7 @@ async function syncPdmChannelsToLights(db, mqttService) {
 
     // Filter enabled PDMs, sorted deterministically by hostname
     const pdms = modules
-        .filter(m => m.type === 'power_distribution_module' && m.enabled)
+        .filter(m => m.type === 'torrent' && m.enabled)
         .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''));
 
     const lightsCollection = db.collection('lights');

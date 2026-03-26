@@ -292,9 +292,9 @@ module.exports = (db) => {
                 }
             }
 
-            // Trigger Plateau config broadcast via CAN if a vehicle_leveler module is present
+            // Trigger Plateau config broadcast via CAN if an aftline module is present
             if (mcu_modules !== undefined) {
-                const leveler = mcu_modules.find(m => m.type === 'vehicle_leveler' && m.enabled !== false);
+                const leveler = mcu_modules.find(m => m.type === 'aftline' && m.enabled !== false);
                 if (leveler && leveler.config) {
                     const mqttService = require('../mqtt');
                     try {

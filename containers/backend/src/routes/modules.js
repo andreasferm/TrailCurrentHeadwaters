@@ -3,20 +3,22 @@ const router = express.Router();
 const { ObjectId } = require('mongodb');
 
 const MCU_MODULES = [
-    'air_quality_module',
-    'cabinet_and_door_sensor',
-    'can_esp_now_gateway',
-    'eight_button_panel',
-    'electric_heater_control',
-    'gnss_module',
-    'mppt_can_gateway',
-    'power_distribution_module',
-    'seven_pin_trailer_monitor',
-    'shunt_gateway',
-    'switchback_relay',
-    'vehicle_leveler',
-    'wall_mounted_display'
+    { id: 'fireside', name: 'Fireside' },
+    { id: 'spotter', name: 'Spotter' },
+    { id: 'milepost', name: 'Milepost' },
+    { id: 'solstice', name: 'Solstice' },
+    { id: 'ampline', name: 'Ampline' },
+    { id: 'torrent', name: 'Torrent' },
+    { id: 'tapper', name: 'Tapper' },
+    { id: 'resivoir', name: 'Resivoir' },
+    { id: 'borealis', name: 'Borealis' },
+    { id: 'aftline', name: 'Aftline' },
+    { id: 'picket', name: 'Picket' },
+    { id: 'bearing', name: 'Bearing' },
+    { id: 'therma', name: 'Therma' }
 ];
+
+const VALID_MODULE_IDS = MCU_MODULES.map(m => m.id);
 
 module.exports = (db) => {
     const modules = db.collection('modules');
@@ -46,11 +48,7 @@ module.exports = (db) => {
     // GET /api/modules/types - Get available module types
     router.get('/types', async (req, res) => {
         try {
-            const moduleTypes = MCU_MODULES.map(module => ({
-                id: module,
-                name: module
-            }));
-            res.json(moduleTypes);
+            res.json(MCU_MODULES);
         } catch (error) {
             console.error('Error fetching module types:', error);
             res.status(500).json({ error: 'Failed to fetch module types' });
@@ -71,8 +69,8 @@ module.exports = (db) => {
                 return res.status(400).json({ error: 'Module type is required' });
             }
 
-            if (!MCU_MODULES.includes(type)) {
-                return res.status(400).json({ error: `Invalid module type. Must be one of: ${MCU_MODULES.join(', ')}` });
+            if (!VALID_MODULE_IDS.includes(type)) {
+                return res.status(400).json({ error: `Invalid module type. Must be one of: ${VALID_MODULE_IDS.join(', ')}` });
             }
 
             if (!hostname || typeof hostname !== 'string' || hostname.trim().length === 0) {

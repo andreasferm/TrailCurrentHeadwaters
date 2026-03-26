@@ -15,6 +15,11 @@ let cancelBtnListener = null;
 let backdropListener = null;
 let typeChangeListener = null;
 
+function getModuleDisplayName(typeId) {
+    const found = moduleTypes.find(m => m.id === typeId);
+    return found ? found.name : typeId;
+}
+
 export const configPage = {
     render() {
         return `
@@ -201,7 +206,7 @@ export const configPage = {
                         <div class="module-info">
                             <div class="module-header">
                                 <h3 class="module-name">${escapeHtml(module.name)}</h3>
-                                <span class="module-type-badge">${escapeHtml(module.type)}</span>
+                                <span class="module-type-badge">${escapeHtml(getModuleDisplayName(module.type))}</span>
                             </div>
                             <p class="module-description">
                                 ${module.hostname ? `<span class="module-hostname">Hostname: ${escapeHtml(module.hostname)}</span> • ` : ''}${module.enabled ? '✓ Enabled' : '○ Disabled'}
@@ -597,19 +602,13 @@ export const configPage = {
         document.getElementById('module-name').value = module.name;
         document.getElementById('module-hostname').value = module.hostname || '';
 
-        // Handle channel-based config (PDM / Switchback), leveler, or generic JSON
-        if (module.type === 'power_distribution_module') {
+        // Handle channel-based config (Torrent PDM), leveler, or generic JSON
+        if (module.type === 'torrent') {
             const channels = module.config?.channels || this.getDefaultChannels();
-            this.togglePdmChannelsUI('power_distribution_module');
-            this.renderChannelRows(channels, 'power_distribution_module');
-        } else if (module.type === 'switchback_relay') {
-            const saved = module.config?.channels || [];
-            const defaults = this.getSwitchbackDefaultChannels();
-            const channels = defaults.map((def, i) => saved[i] || def);
-            this.togglePdmChannelsUI('switchback_relay');
-            this.renderChannelRows(channels, 'switchback_relay');
-        } else if (module.type === 'vehicle_leveler') {
-            this.togglePdmChannelsUI('vehicle_leveler');
+            this.togglePdmChannelsUI('torrent');
+            this.renderChannelRows(channels, 'torrent');
+        } else if (module.type === 'aftline') {
+            this.togglePdmChannelsUI('aftline');
             this.populateLevelerFields(module.config || {});
         } else {
             this.togglePdmChannelsUI(module.type);
@@ -700,9 +699,9 @@ export const configPage = {
         }
 
         let config = {};
-        if (type === 'power_distribution_module' || type === 'switchback_relay') {
+        if (type === 'torrent') {
             config = { channels: this.collectChannelData() };
-        } else if (type === 'vehicle_leveler') {
+        } else if (type === 'aftline') {
             config = this.collectLevelerData();
             if (!config) return; // validation failed
         } else if (configText) {
@@ -936,7 +935,7 @@ export const configPage = {
     togglePdmChannelsUI(moduleType) {
         const jsonGroup = document.getElementById('json-config-group');
         const channelsConfig = document.getElementById('pdm-channels-config');
-        const showChannels = moduleType === 'power_distribution_module' || moduleType === 'switchback_relay';
+        const showChannels = moduleType === 'torrent';
 
         if (showChannels) {
             jsonGroup.style.display = 'none';
@@ -944,19 +943,16 @@ export const configPage = {
             // Populate channel rows if empty
             const list = document.getElementById('pdm-channel-list');
             if (!list.children.length) {
-                const defaults = moduleType === 'switchback_relay'
-                    ? this.getSwitchbackDefaultChannels()
-                    : this.getDefaultChannels();
-                this.renderChannelRows(defaults, moduleType);
+                this.renderChannelRows(this.getDefaultChannels(), moduleType);
             }
         } else {
-            jsonGroup.style.display = moduleType === 'vehicle_leveler' ? 'none' : 'block';
+            jsonGroup.style.display = moduleType === 'aftline' ? 'none' : 'block';
             channelsConfig.style.display = 'none';
         }
 
         // Leveler config is independent of PDM channels
         document.getElementById('leveler-config').style.display =
-            moduleType === 'vehicle_leveler' ? 'block' : 'none';
+            moduleType === 'aftline' ? 'block' : 'none';
     },
 
     getDefaultChannels() {
@@ -983,7 +979,6 @@ export const configPage = {
         const iconOptions = ICON_LIST.map(ic =>
             `<option value="${ic.key}">${escapeHtml(ic.label)}</option>`
         ).join('');
-        const isSwitchback = moduleType === 'switchback_relay';
 
         list.innerHTML = channels.map(ch => `
             <div class="pdm-channel-row" data-channel="${ch.channel}">
@@ -1002,7 +997,7 @@ export const configPage = {
         list.querySelectorAll('.pdm-channel-row').forEach((row, i) => {
             const iconSelect = row.querySelector('.pdm-channel-icon');
             if (iconSelect && channels[i]) {
-                iconSelect.value = channels[i].icon || (isSwitchback ? 'power-outlet' : 'lightbulb');
+                iconSelect.value = channels[i].icon || 'lightbulb';
             }
         });
     },
