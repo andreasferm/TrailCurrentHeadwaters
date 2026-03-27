@@ -28,9 +28,35 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RPIIG_DIR="$SCRIPT_DIR/../rpi-image-gen"
+REPO_ROOT="$SCRIPT_DIR/../.."
 
 TC_USER="${1:-trailcurrent}"
 TC_PASS="${2:-trailcurrent}"
+
+# Check prerequisites: Docker images and map tiles must exist
+echo "Checking prerequisites..."
+
+if ! ls "$REPO_ROOT"/images/*.tar 1>/dev/null 2>&1; then
+    echo "ERROR: No Docker image tarballs found at images/*.tar"
+    echo "Run ./build-and-save-images.sh from the repo root first."
+    exit 1
+fi
+echo "  Docker image tarballs: OK"
+
+if [ ! -f "$REPO_ROOT/data/tileserver/map.mbtiles" ]; then
+    echo "WARNING: map.mbtiles not found at data/tileserver/map.mbtiles"
+    echo "  The image will be built without map tiles."
+    echo "  The tileserver container will not start without this file."
+    read -rp "  Continue anyway? [y/N] " answer
+    if [ "$answer" != "y" ] && [ "$answer" != "Y" ]; then
+        exit 1
+    fi
+else
+    MBTILES_SIZE=$(du -h "$REPO_ROOT/data/tileserver/map.mbtiles" | cut -f1)
+    echo "  Map tiles ($MBTILES_SIZE): OK"
+fi
+
+echo ""
 
 # Hash the password so we can use IGconf_device_user1passhash
 # instead of user1pass (which has strict complexity validation)
@@ -82,10 +108,16 @@ echo "  7. sync"
 echo "  8. Remove EMMC_DISABLE jumper, disconnect USB, power cycle"
 echo ""
 echo "On first boot the CM5 will automatically:"
-echo "  - Partition and format the NVMe drive"
+echo "  - Expand root partition to fill the NVMe drive"
 echo "  - Configure EEPROM for auto-boot on power"
 echo "  - Generate TLS certificates"
 echo "  - Set up the Python virtual environment"
+echo "  - Load Docker images from baked-in tarballs"
+echo ""
+echo "On first SSH login, an interactive setup wizard will:"
+echo "  - Prompt for MQTT, Node-RED, and admin passwords"
+echo "  - Auto-generate encryption keys"
+echo "  - Write .env and start all services"
 echo ""
 echo "See CM5/SETUP.md for the full getting-started guide."
 echo ""

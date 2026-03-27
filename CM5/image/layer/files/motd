@@ -14,3 +14,6 @@
 [1;32m  TrailCurrent Headwaters[0m
 [37m  In-Vehicle Compute Platform[0m
 
+[33m  First time? Setup will start automatically.[0m
+[37m  Re-run anytime: /usr/local/bin/trailcurrent-first-login.sh[0m
+

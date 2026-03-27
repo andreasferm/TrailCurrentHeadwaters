@@ -9,9 +9,9 @@ Dockerized edge gateway with MQTT broker, tile server, and local dashboards. Par
 | I want to... | Go here |
 |--------------|---------|
 | Set up a development environment | [Development Setup](#development-setup) below |
-| Build a deployment package | [Building Deployment Packages](#building-deployment-packages) below |
-| Set up a new CM5 device | [CM5/SETUP.md](CM5/SETUP.md) |
-| Deploy or update a device | [PI_DEPLOYMENT.md](PI_DEPLOYMENT.md) |
+| Build a CM5 image or deployment package | [Building for CM5 Devices](#building-for-cm5-devices) below |
+| Flash and set up a new CM5 device | [CM5/SETUP.md](CM5/SETUP.md) |
+| Update an existing device | [PI_DEPLOYMENT.md](PI_DEPLOYMENT.md) |
 | Set up Node-RED flows | [Node-RED Setup](#node-red-setup) below |
 | Understand cloud OTA updates | [OTA_DEPLOYMENT_IMPLEMENTATION.md](OTA_DEPLOYMENT_IMPLEMENTATION.md#cloud-to-pi-ota-deployment-deployment-watcher) |
 
@@ -136,9 +136,42 @@ curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/fonts/Noto%20Sans%
 
 ---
 
-## Building Deployment Packages
+## Building for CM5 Devices
 
-For creating the offline zip that gets deployed to CM5 devices. The deployment pipeline builds Docker images for ARM64, packages them as tar files, and creates a self-contained zip.
+There are two ways to get the application onto a CM5 device:
+
+### Option A: Build a Complete CM5 Image (Recommended for New Devices)
+
+The CM5 image includes everything — OS, Docker, application containers, map
+tiles, and configuration. After flashing, the user just sets passwords via
+an interactive wizard on first SSH login.
+
+**Prerequisites (files not in the repo that you must provide):**
+
+| File | How to get it |
+|------|---------------|
+| `images/*.tar` | Run `./build-and-save-images.sh` (builds ARM64 Docker images) |
+| `data/tileserver/map.mbtiles` | Copy from a team member or generate from OSM data (see [DOCS/UpdatingMapTiles.md](DOCS/UpdatingMapTiles.md)) |
+
+**Build the image:**
+```bash
+# 1. Build ARM64 Docker images (~10 min first time)
+./build-and-save-images.sh
+
+# 2. Ensure map.mbtiles exists at data/tileserver/map.mbtiles
+
+# 3. Build the CM5 image (bakes in Docker images, map tiles, app code, configs)
+cd CM5/image
+sudo ./build.sh myuser mypassword
+```
+
+The output image (~28 GB) is flashed to NVMe via `dd`. See [CM5/SETUP.md](CM5/SETUP.md)
+for the full flashing and setup procedure.
+
+### Option B: Build a Deployment Package (For Updating Existing Devices)
+
+For updating devices that already have an image flashed, create an offline
+deployment zip:
 
 ```bash
 # Build everything and create the zip
@@ -153,12 +186,17 @@ This will:
 
 **Transfer and deploy to device:**
 ```bash
-scp trailcurrent-deployment-1.0.0.zip trailcurrent@trailcurrent01.local:~
+scp trailcurrent-deployment-1.0.0.zip trailcurrent@headwaters.local:~
 # On the device:
-unzip trailcurrent-deployment-1.0.0.zip && chmod +x deploy.sh && ./deploy.sh
+unzip -o trailcurrent-deployment-1.0.0.zip && ./deploy.sh
 ```
 
 See [PI_DEPLOYMENT.md](PI_DEPLOYMENT.md) for detailed deployment instructions.
+
+> **Note:** `build-and-save-images.sh` is a prerequisite for both options.
+> The CM5 image build (`build.sh`) and the deployment package
+> (`create-deployment-package.sh`) both consume the `images/*.tar` files
+> it produces.
 
 ---
 
@@ -177,10 +215,12 @@ config/              Version-controlled service configurations
   node-red/          settings.js, starter-flow.json, cloud-workflow.json
 data/                Runtime data (gitignored)
   keys/              TLS certificates
-  tileserver/        map.mbtiles
+  tileserver/        map.mbtiles (~25 GB, not in repo)
   node-red/          Node-RED flows
+images/              ARM64 Docker image tarballs (gitignored, built by build-and-save-images.sh)
 local_code/          Python host services (CAN-to-MQTT bridge, deployment watcher, OTA helpers)
 scripts/             Utility scripts (cert generation)
+CM5/                 CM5 image build system, flashing tools, setup guide
 ```
 
 **Docker Compose files:**

@@ -2,15 +2,24 @@
 
 ## Overview
 
-This document describes how to deploy TrailCurrent to a CM5 device using the offline deployment package. The system uses pre-built Docker images bundled into a zip file — no internet access is required on the device after the initial image is flashed.
+This document covers two scenarios:
 
-For initial device setup (flashing the CM5 image), see [CM5/SETUP.md](CM5/SETUP.md).
+1. **Updating an existing device** with a new deployment package (the
+   primary use case for this guide)
+2. **Installing the CA certificate** on client devices (phones, tablets,
+   laptops)
+
+**For initial device setup** (flashing a new CM5 and running the first-login
+wizard), see [CM5/SETUP.md](CM5/SETUP.md). The CM5 image includes all
+application code, Docker images, and map tiles baked in — no deployment
+package transfer is needed for a fresh device.
 
 ---
 
 ## Deployment Package
 
-The deployment zip is created on your development machine using:
+The deployment zip is used to **update** devices that already have a base
+image flashed and configured. It is created on your development machine:
 
 ```bash
 ./create-deployment-package.sh --version=1.0.0
@@ -27,27 +36,40 @@ This produces `trailcurrent-deployment-1.0.0.zip` containing:
 - `deploy.sh` — Deployment orchestrator
 - `PI_DEPLOYMENT.md` — This file
 
+> **Note:** `build-and-save-images.sh` must be run before creating a
+> deployment package. It builds the ARM64 Docker images and saves them as
+> tar files in `images/`. See [README.md](README.md#building-for-cm5-devices).
+
 ---
 
-## First-Time Deployment
+## Initial Setup (Fresh Devices)
 
-### Prerequisites
+For devices flashed with the current CM5 image, **no deployment package is
+needed**. The image includes all application artifacts baked in. On first
+SSH login, an interactive setup wizard runs automatically and:
 
-- CM5 device with the TrailCurrent image flashed (see [CM5/SETUP.md](CM5/SETUP.md))
-- SSH access to the Pi
-- `jq` installed (`sudo apt install jq`) — needed for OTA firmware deployment
-- Map tiles file (`map.mbtiles`) transferred separately (~25GB)
+1. Prompts for MQTT, Node-RED, and admin passwords
+2. Auto-generates encryption keys
+3. Writes `.env` and starts all services
 
-### Steps
+See [CM5/SETUP.md](CM5/SETUP.md) for the complete flashing and first-login
+procedure.
+
+If you are working with an **older image** that does not include baked-in
+artifacts, you can still deploy manually using the steps below.
+
+### Manual First-Time Deployment (Legacy Images)
+
+For devices running older images without baked-in application artifacts:
 
 1. **Transfer the deployment package to the Pi:**
    ```bash
-   scp trailcurrent-deployment-1.0.0.zip trailcurrent@trailcurrent01.local:~
+   scp trailcurrent-deployment-1.0.0.zip trailcurrent@headwaters.local:~
    ```
 
 2. **SSH to the Pi and extract:**
    ```bash
-   ssh trailcurrent@trailcurrent01.local
+   ssh trailcurrent@headwaters.local
    unzip trailcurrent-deployment-1.0.0.zip
    ```
 
@@ -73,7 +95,7 @@ This produces `trailcurrent-deployment-1.0.0.zip` containing:
    # Set these values:
    #   MQTT_USERNAME / MQTT_PASSWORD
    #   ADMIN_PASSWORD
-   #   TLS_CERT_HOSTNAME=trailcurrent01.local
+   #   TLS_CERT_HOSTNAME=headwaters.local
    #   ENCRYPTION_KEY=$(openssl rand -hex 32)
    #   NODE_RED_CREDENTIAL_SECRET=$(openssl rand -hex 64)
    ```
@@ -84,6 +106,8 @@ This produces `trailcurrent-deployment-1.0.0.zip` containing:
    mkdir -p data/tileserver
    # Transfer map.mbtiles to data/tileserver/
    ```
+
+<a id="install-the-ca-certificate"></a>
 
 6. **Install the CA certificate on phones/tablets** (for PWA home screen icon):
 

@@ -84,11 +84,58 @@ This bakes `boot.conf` (which sets `BOOT_ORDER=0xf16` — NVMe first, SD
 fallback) into an EEPROM image. The output is used in the per-device
 procedure below.
 
-### 3. Build the Base Image
+### 3. Build the Docker Images (ARM64)
 
-The base image includes the OS, Docker, CAN bus configuration, power
-optimizations, and all system dependencies. It does **not** include the
-application stack (containers, flows, config) — those come from `deploy.sh`.
+The CM5 image includes all Docker containers and map tiles baked in, so
+they must exist before you build the OS image. Build the ARM64 Docker
+images first:
+
+```bash
+# From the repo root
+./build-and-save-images.sh
+```
+
+This cross-compiles all 6 service images for `linux/arm64` (plus
+`mongo:7`) and saves them as tar files in `images/`. Takes ~10 minutes
+on the first run.
+
+> **Requires:** Docker Engine with `buildx`. The script creates a
+> dedicated builder (`trailcurrent-arm64`) automatically.
+
+### 4. Obtain Map Tiles
+
+The tileserver requires a pre-generated `.mbtiles` file (~25 GB for the
+US). This file is baked into the CM5 image so devices are ready to run
+immediately after flashing.
+
+```bash
+mkdir -p data/tileserver
+# Place your tiles file at: data/tileserver/map.mbtiles
+```
+
+**How to get tiles:**
+- Copy from an existing team member's machine
+- Generate from OpenStreetMap data using the **PbfTileConverter** utility
+  (see [DOCS/UpdatingMapTiles.md](../DOCS/UpdatingMapTiles.md))
+
+### 5. Build the CM5 Image
+
+The image includes everything needed to run TrailCurrent: the OS, Docker,
+CAN bus configuration, power optimizations, all Docker container images,
+the Python local code, map tiles, and configuration files. After flashing,
+the only manual step is the first-login setup wizard (which sets passwords
+and generates encryption keys).
+
+**Prerequisites (build.sh will verify these exist):**
+
+| File | Source | Purpose |
+|------|--------|---------|
+| `images/*.tar` | Step 3 (`build-and-save-images.sh`) | Docker container images |
+| `data/tileserver/map.mbtiles` | Step 4 | Map tile data (~25 GB) |
+| `docker-compose.yml` | In repo | Service orchestration |
+| `config/` | In repo | Mosquitto and Node-RED configuration |
+| `local_code/` | In repo | Python CAN-to-MQTT bridge and helpers |
+| `scripts/` | In repo | Certificate generation scripts |
 
 ```bash
 cd CM5/image
@@ -104,11 +151,16 @@ rpi-image-gen, so there are no complexity restrictions — use whatever
 password you want.
 
 The script will:
-1. Clone `rpi-image-gen` from GitHub (first run only)
-2. Install build dependencies (first run only)
-3. Build the image
+1. Verify Docker image tars and map tiles exist
+2. Clone `rpi-image-gen` from GitHub (first run only)
+3. Install build dependencies (first run only)
+4. Build the image (baking in all deployment artifacts)
 
 Output: `CM5/rpi-image-gen/work/image-trailcurrent-cm5-base/trailcurrent-cm5-base.img`
+
+> **Image size:** The output image is ~28 GB due to the baked-in map
+> tiles. Flashing to NVMe via `dd` takes longer than a minimal image
+> but eliminates the need to transfer tiles separately.
 
 > **Build host requirements:** Debian or Ubuntu (Bookworm/Trixie/Noble).
 > On x86_64 hosts, QEMU user-mode emulation is used automatically (slower
@@ -237,9 +289,9 @@ Replace `/dev/sdX` with the NVMe device.
 
 ### Step 6: First Boot
 
-The CM5 should boot from NVMe. On the first boot, the
-`trailcurrent-firstboot` service runs automatically and handles all
-per-device setup:
+The CM5 boots from NVMe. On the first boot, two services run automatically:
+
+**`trailcurrent-firstboot`** (runs before Docker starts):
 
 1. **Partition expansion** — Expands the root partition to fill the entire
    NVMe drive using `growpart` and `resize2fs`.
@@ -254,13 +306,20 @@ per-device setup:
    and the frontend.
 
 4. **Python virtual environment** — Creates the venv at
-   `~/local_code/cantomqtt/` and installs the CAN-to-MQTT dependencies.
+   `~/local_code/cantomqtt/` and installs Python dependencies.
 
-First boot takes 2-3 minutes. You can monitor progress via:
+**`trailcurrent-load-images`** (runs after Docker starts):
+
+5. **Docker image loading** — Loads all baked-in Docker image tarballs
+   into the Docker daemon, then deletes the tar files to reclaim ~1 GB
+   of disk space.
+
+First boot takes 3-5 minutes. You can monitor progress via:
 
 ```bash
 ssh trailcurrent@headwaters.local
 journalctl -u trailcurrent-firstboot -f
+journalctl -u trailcurrent-load-images -f
 ```
 
 After first boot completes, **reboot once** for the EEPROM changes to take
@@ -270,91 +329,38 @@ effect:
 sudo reboot
 ```
 
-### Step 7: Verify the System
+### Step 7: First Login (Interactive Setup Wizard)
 
-After the reboot:
-
-```bash
-# Check root is on NVMe and partition is expanded
-df -h /
-
-# Check Docker is running
-docker info | grep "Docker Root Dir"
-# Expected: /var/lib/docker
-
-# Check CAN interface (requires CAN hat to be connected)
-ifconfig can0
-
-# Check SPI
-ls /dev/spidev0.*
-
-# Check all services
-systemctl status can0 docker trailcurrent-firstboot
-```
-
-### Step 8: Transfer Map Tiles
-
-The tileserver requires a map tiles file (~25 GB). This must be transferred
-before deploying the application, as the tileserver container will fail
-without it.
-
-From your build host:
-
-```bash
-scp /path/to/map.mbtiles trailcurrent@headwaters.local:~/data/tileserver/
-```
-
-> **This transfer takes a while over Ethernet.** You can continue with
-> Steps 9-10 in a separate SSH session while the transfer runs, but do not
-> start the application (Step 11) until the transfer is complete.
-
-### Step 9: Transfer the Deployment Package
-
-From your build host:
-
-```bash
-scp trailcurrent-deployment-*.zip trailcurrent@headwaters.local:~/
-```
-
-### Step 10: Configure the Environment
-
-SSH to the board and extract the deployment package:
+After reboot, SSH into the device. The first-login setup wizard runs
+automatically when no `.env` file exists:
 
 ```bash
 ssh trailcurrent@headwaters.local
-unzip trailcurrent-deployment-*.zip
 ```
 
-The first run of `deploy.sh` creates `.env` from `.env.example`. Edit it
-with your credentials:
+The wizard will prompt you for:
+- **MQTT username and password** (default username: `trailcurrent`)
+- **Node-RED admin username and password** (default username: `admin`)
+- **Admin password** (for the web UI)
+- **Device hostname** (default: `headwaters.local`)
 
-```bash
-cp .env.example .env
-nano .env
-```
+The wizard **automatically generates** cryptographic secrets:
+- `ENCRYPTION_KEY` (WiFi credential encryption, 32 bytes)
+- `NODE_RED_CREDENTIAL_SECRET` (Node-RED credential encryption, 64 bytes)
 
-Set these values:
-- `MQTT_USERNAME` / `MQTT_PASSWORD` — MQTT broker credentials
-- `ADMIN_PASSWORD` — Admin password for the web UI
-- `TLS_CERT_HOSTNAME=headwaters.local`
-- `ENCRYPTION_KEY` — generate with `openssl rand -hex 32`
-- `NODE_RED_CREDENTIAL_SECRET` — generate with `openssl rand -hex 64`
+After collecting your inputs, the wizard:
+1. Writes `.env` and `local_code/.env`
+2. Installs the CA certificate to the system trust store
+3. Starts all Docker containers
+4. Restarts systemd services (CAN-to-MQTT, deployment watcher, mDNS discovery)
 
-### Step 11: Deploy the Application
+> **To re-run the wizard** (e.g., after deleting `.env` to start fresh):
+> ```bash
+> rm ~/.env
+> /usr/local/bin/trailcurrent-first-login.sh
+> ```
 
-```bash
-chmod +x deploy.sh
-./deploy.sh
-```
-
-`deploy.sh` will:
-- Load all Docker images from tar files
-- Start all services
-- Set up the CAN-to-MQTT bridge
-- Set up the deployment watcher (for cloud OTA updates)
-- Deploy MCU firmware via OTA (if firmware is included)
-
-### Step 12: Verify the Application
+### Step 8: Verify the Application
 
 ```bash
 # All containers running
@@ -372,8 +378,17 @@ curl -k -o /dev/null -s -w "%{http_code}" https://localhost/
 
 Access the web UI at `https://headwaters.local`.
 
-See [PI_DEPLOYMENT.md](../PI_DEPLOYMENT.md) for update procedures, CA
-certificate installation on client devices, and troubleshooting.
+### Step 9: Install CA Certificate on Client Devices (Optional)
+
+TrailCurrent uses a self-signed TLS certificate. Browsers will let you
+tap through the certificate warning, but iOS requires the CA to be
+trusted at the OS level for the PWA "Add to Home Screen" icon to work.
+
+See [PI_DEPLOYMENT.md](../PI_DEPLOYMENT.md#install-the-ca-certificate)
+for instructions on installing the CA on iOS, Android, macOS, and Windows.
+
+See [PI_DEPLOYMENT.md](../PI_DEPLOYMENT.md) for subsequent update
+procedures and troubleshooting.
 
 ---
 
@@ -383,25 +398,30 @@ For experienced operators who have done this before. Refer to the full
 procedure above if anything is unclear.
 
 ```
+One-time (build host):
+  1. ./build-and-save-images.sh                              # Build ARM64 Docker images
+  2. Place map.mbtiles in data/tileserver/                   # Obtain map tiles
+  3. cd CM5/image && sudo ./build.sh myuser mypassword       # Build CM5 image
+
 For each board:
   1. Install NVMe, fit EMMC_DISABLE jumper (if eMMC), connect USB, power on
   2. cd CM5/usbboot/recovery5 && sudo ../rpiboot -d .       # Flash EEPROM
   3. Power cycle
   4. cd CM5/usbboot && sudo ./rpiboot -d mass-storage-gadget64  # Expose storage
   5. lsblk                                                   # Identify NVMe (larger sd* device)
-  6. sudo dd if=...img of=/dev/sdX bs=4M status=progress conv=fsync  # Flash NVMe
+  6. sudo dd if=...img of=/dev/sdX bs=4M status=progress conv=fsync  # Flash NVMe (~28GB)
   7. Remove jumper, disconnect USB, connect Ethernet, power cycle
-  8. Wait for first boot (~2-3 min), then: sudo reboot
-  9. Verify base: df -h / && systemctl status can0
- 10. scp map.mbtiles to ~/data/tileserver/
- 11. scp deployment zip, unzip, configure .env
- 12. ./deploy.sh
- 13. Verify: docker compose ps && curl -k https://localhost/api/health
+  8. Wait for first boot (~3-5 min), then: sudo reboot
+  9. SSH in — first-login wizard runs automatically, set passwords
+ 10. Verify: docker compose ps && curl -k https://localhost/api/health
 ```
 
 ---
 
-## What's in the Base Image
+## What's in the Image
+
+The CM5 image is a self-contained deployment. After flashing, the only
+manual step is the first-login setup wizard.
 
 ### System Packages
 
@@ -414,6 +434,21 @@ For each board:
 Docker CE and Docker Compose plugin, installed from Docker's official
 repository. Uses the default data root (`/var/lib/docker`) on the NVMe root
 filesystem.
+
+### Baked-In Application Artifacts
+
+These are copied into `/home/trailcurrent/` during the image build:
+
+| Path | Source | Purpose |
+|------|--------|---------|
+| `~/docker-compose.yml` | Repo root | Service orchestration |
+| `~/config/` | `config/` | Mosquitto and Node-RED configuration |
+| `~/local_code/` | `local_code/` | Python scripts, systemd units, requirements |
+| `~/scripts/` | `scripts/` | Certificate generation |
+| `~/deploy.sh` | Repo root | For future OTA deployments |
+| `~/.env.example` | Repo root | Environment variable template (reference) |
+| `~/images/*.tar` | `images/` | Docker image tarballs (loaded on first boot, then deleted) |
+| `~/data/tileserver/map.mbtiles` | `data/tileserver/` | Map tile data (~25 GB) |
 
 ### Boot Configuration (config.txt)
 
@@ -440,11 +475,24 @@ filesystem.
 | Service | Purpose | Auto-starts? |
 |---------|---------|-------------|
 | `trailcurrent-firstboot` | One-time partition expansion/EEPROM/TLS/venv setup | Once (first boot only) |
+| `trailcurrent-load-images` | Loads Docker images from baked-in tarballs | Once (first boot, after Docker starts) |
 | `can0` | Brings up CAN bus at 500 kbps | Yes (when can0 device exists) |
 | `disable-usb` | Unbinds USB hub to save power | Yes |
 | `docker` | Container runtime | Yes |
-| `cantomqtt` | CAN-to-MQTT bridge | After deployment (ConditionPathExists) |
-| `deployment-watcher` | Watches for OTA deployment updates | After deployment (ConditionPathExists) |
+| `cantomqtt` | CAN-to-MQTT bridge | Yes (after .env exists via first-login) |
+| `discovery-mdns` | mDNS device discovery browser | Yes (after .env exists via first-login) |
+| `deployment-watcher` | Watches for OTA deployment updates | Yes (after .env exists via first-login) |
+
+### First-Login Setup Scripts
+
+| File | Purpose |
+|------|---------|
+| `/usr/local/bin/trailcurrent-first-login.sh` | Interactive wizard — prompts for passwords, generates secrets, writes `.env`, starts services |
+| `/usr/local/bin/trailcurrent-firstboot.sh` | Automatic first-boot hardware setup (partition, EEPROM, TLS, venv) |
+| `/usr/local/bin/trailcurrent-load-images.sh` | Loads Docker images from tarballs, deletes tars to free space |
+
+The first-login script is triggered from `~/.bash_profile` when `.env`
+does not exist. It runs once — subsequent logins skip it.
 
 ## Troubleshooting
 
@@ -524,9 +572,24 @@ If the EEPROM is in an unknown state, redo Step 2 of the per-device procedure:
 
 ```bash
 journalctl -u trailcurrent-firstboot --no-pager
+journalctl -u trailcurrent-load-images --no-pager
+```
+
+### Docker images not loaded
+
+If `docker images` shows no TrailCurrent images after first boot:
+
+```bash
+# Check if the loader ran
+systemctl status trailcurrent-load-images
+
+# If the tarballs still exist, load manually
+for f in ~/images/*.tar; do docker load -i "$f"; done
 ```
 
 ## File Layout Reference
+
+### Build Host (Repository)
 
 ```
 CM5/
@@ -537,12 +600,49 @@ CM5/
 │       ├── boot.conf        <- Boot order settings (BOOT_ORDER=0xf16)
 │       └── update-pieeprom.sh <- Builds EEPROM image from boot.conf
 ├── image/                    <- Image build system
-│   ├── build.sh             <- Build wrapper script
+│   ├── build.sh             <- Build wrapper (checks prerequisites first)
 │   ├── config/
 │   │   └── trailcurrent-cm5-base.yaml   <- Build configuration
 │   └── layer/
-│       ├── trailcurrent-base.yaml       <- Custom layer (packages, services, config)
+│       ├── trailcurrent-base.yaml       <- Custom layer (packages, services, baked artifacts)
 │       └── files/
-│           └── trailcurrent-firstboot.sh <- First-boot setup script
+│           ├── trailcurrent-firstboot.sh    <- First-boot hardware setup
+│           ├── trailcurrent-load-images.sh  <- Docker image loader (first boot)
+│           ├── trailcurrent-first-login.sh  <- Interactive setup wizard (first login)
+│           └── motd                         <- Console login banner
 └── rpi-image-gen/            <- Cloned automatically by build.sh (not committed)
+```
+
+Files referenced by the image build but located elsewhere in the repo:
+
+```
+(repo root)
+├── images/*.tar              <- Docker image tarballs (from build-and-save-images.sh)
+├── data/tileserver/map.mbtiles <- Map tiles (~25 GB, not in repo)
+├── docker-compose.yml        <- Baked into image at ~/docker-compose.yml
+├── config/                   <- Baked into image at ~/config/
+├── local_code/               <- Baked into image at ~/local_code/
+├── scripts/                  <- Baked into image at ~/scripts/
+├── deploy.sh                 <- Baked into image at ~/deploy.sh
+└── .env.example              <- Baked into image at ~/.env.example
+```
+
+### On the CM5 Device (After Flashing)
+
+```
+/home/trailcurrent/
+├── .env                      <- Created by first-login wizard (not baked in)
+├── .env.example              <- Reference template
+├── docker-compose.yml        <- Service orchestration
+├── deploy.sh                 <- For future OTA updates
+├── config/                   <- Mosquitto and Node-RED configuration
+├── scripts/                  <- Certificate generation
+├── local_code/               <- Python scripts, systemd units
+│   ├── .env                  <- Created by first-login wizard (host-facing MQTT URL)
+│   └── cantomqtt/            <- Python virtual environment (created by firstboot)
+├── images/                   <- Docker tarballs (deleted after first-boot loading)
+└── data/
+    ├── keys/                 <- TLS certificates (generated by firstboot)
+    ├── tileserver/map.mbtiles <- Map tiles (baked into image)
+    └── node-red/             <- Node-RED runtime data
 ```

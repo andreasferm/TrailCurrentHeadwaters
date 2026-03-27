@@ -317,6 +317,21 @@ module.exports = (db) => {
                 }
             }
 
+            // Trigger Borealis calibration broadcast via CAN if a borealis module is present
+            if (mcu_modules !== undefined) {
+                const borealis = mcu_modules.find(m => m.type === 'borealis' && m.enabled !== false);
+                if (borealis && borealis.config && borealis.config.temp_offset !== undefined) {
+                    const mqttService = require('../mqtt');
+                    try {
+                        const offsetTenths = Math.round(borealis.config.temp_offset * 10);
+                        console.log('[System Config] Publishing Borealis calibration to CAN bus');
+                        mqttService.publishBorealisCalibration(offsetTenths);
+                    } catch (error) {
+                        console.error('[System Config] Error publishing Borealis calibration:', error);
+                    }
+                }
+            }
+
             // Notify local services if cloud config changed
             if (cloud_enabled !== undefined || cloud_url !== undefined || cloud_mqtt_username !== undefined || cloud_mqtt_password !== undefined || cloud_api_key !== undefined) {
                 const mqttService = require('../mqtt');

@@ -168,6 +168,18 @@ export const configPage = {
                             </div>
                         </div>
 
+                        <div class="borealis-config" id="borealis-config" style="display: none;">
+                            <label class="form-label">Calibration</label>
+                            <p class="form-hint" style="margin-bottom: 12px;">Adjust the temperature sensor offset. This value is sent to Borealis via CAN bus and persists across reboots.</p>
+
+                            <div class="leveler-field-group">
+                                <label for="borealis-temp-offset" class="form-label">Temperature Offset (&deg;C)</label>
+                                <input type="number" id="borealis-temp-offset" class="form-input"
+                                       placeholder="0.0" min="-100" max="100" step="0.1" value="0">
+                                <p class="form-hint">Offset applied to the SHT31 reading before conversion and transmission. Positive values increase the reported temperature. Send 0 to clear.</p>
+                            </div>
+                        </div>
+
                         <div id="form-message" class="form-message hidden"></div>
 
                         <div class="modal-actions">
@@ -765,14 +777,19 @@ export const configPage = {
         document.getElementById('module-hostname').value = module.hostname || '';
         document.getElementById('module-hostname').disabled = true;
 
-        // Handle channel-based config (Torrent PDM), leveler, or generic JSON
-        if (module.type === 'torrent') {
-            const channels = module.config?.channels || this.getDefaultChannels();
-            this.togglePdmChannelsUI('torrent');
-            this.renderChannelRows(channels, 'torrent');
+        // Handle channel-based config (Torrent PDM, Switchback relay), leveler, borealis, or generic JSON
+        const isSwitchback = module.type === 'switchback' || module.type === 'switchback_relay';
+        if (module.type === 'torrent' || isSwitchback) {
+            const defaults = isSwitchback ? this.getSwitchbackDefaultChannels() : this.getDefaultChannels();
+            const channels = module.config?.channels || defaults;
+            this.togglePdmChannelsUI(module.type);
+            this.renderChannelRows(channels, module.type);
         } else if (module.type === 'aftline') {
             this.togglePdmChannelsUI('aftline');
             this.populateLevelerFields(module.config || {});
+        } else if (module.type === 'borealis') {
+            this.togglePdmChannelsUI('borealis');
+            this.populateBorealisFields(module.config || {});
         } else {
             this.togglePdmChannelsUI(module.type);
             document.getElementById('module-config').value = JSON.stringify(module.config || {}, null, 2);
@@ -864,10 +881,13 @@ export const configPage = {
         }
 
         let config = {};
-        if (type === 'torrent') {
+        if (type === 'torrent' || type === 'switchback' || type === 'switchback_relay') {
             config = { channels: this.collectChannelData() };
         } else if (type === 'aftline') {
             config = this.collectLevelerData();
+            if (!config) return; // validation failed
+        } else if (type === 'borealis') {
+            config = this.collectBorealisData();
             if (!config) return; // validation failed
         } else if (configText) {
             try {
@@ -1084,24 +1104,40 @@ export const configPage = {
     togglePdmChannelsUI(moduleType) {
         const jsonGroup = document.getElementById('json-config-group');
         const channelsConfig = document.getElementById('pdm-channels-config');
-        const showChannels = moduleType === 'torrent';
+        const isSwitchback = moduleType === 'switchback' || moduleType === 'switchback_relay';
+        const showChannels = moduleType === 'torrent' || isSwitchback;
 
         if (showChannels) {
             jsonGroup.style.display = 'none';
             channelsConfig.style.display = 'block';
+            // Update label based on module type
+            const label = channelsConfig.querySelector('.form-label');
+            const hint = channelsConfig.querySelector('.form-hint');
+            if (isSwitchback) {
+                label.textContent = 'Relay Configuration';
+                hint.textContent = 'Configure each relay channel';
+            } else {
+                label.textContent = 'Channel Configuration';
+                hint.textContent = 'Configure each PDM output channel';
+            }
             // Populate channel rows if empty
             const list = document.getElementById('pdm-channel-list');
             if (!list.children.length) {
-                this.renderChannelRows(this.getDefaultChannels(), moduleType);
+                const defaults = isSwitchback ? this.getSwitchbackDefaultChannels() : this.getDefaultChannels();
+                this.renderChannelRows(defaults, moduleType);
             }
         } else {
-            jsonGroup.style.display = moduleType === 'aftline' ? 'none' : 'block';
+            jsonGroup.style.display = (moduleType === 'aftline' || moduleType === 'borealis') ? 'none' : 'block';
             channelsConfig.style.display = 'none';
         }
 
         // Leveler config is independent of PDM channels
         document.getElementById('leveler-config').style.display =
             moduleType === 'aftline' ? 'block' : 'none';
+
+        // Borealis config
+        document.getElementById('borealis-config').style.display =
+            moduleType === 'borealis' ? 'block' : 'none';
     },
 
     getDefaultChannels() {
@@ -1179,6 +1215,27 @@ export const configPage = {
             mounting: mounting,
             vehicle_length_cm: vehicleLength,
             vehicle_width_cm: vehicleWidth
+        };
+    },
+
+    populateBorealisFields(config) {
+        const offsetEl = document.getElementById('borealis-temp-offset');
+        if (offsetEl) {
+            offsetEl.value = config.temp_offset !== undefined ? config.temp_offset : 0;
+        }
+    },
+
+    collectBorealisData() {
+        const offsetVal = parseFloat(document.getElementById('borealis-temp-offset').value);
+
+        if (isNaN(offsetVal) || offsetVal < -100 || offsetVal > 100) {
+            this.showMessage('Temperature offset must be between -100 and 100 °C', 'error');
+            return null;
+        }
+
+        // Round to one decimal place to match tenths-of-degree resolution
+        return {
+            temp_offset: Math.round(offsetVal * 10) / 10
         };
     },
 

@@ -706,6 +706,31 @@ class MqttService {
         return this.publishCanMessage(0x20, [0x03]);
     }
 
+    /**
+     * Send temperature calibration offset to Borealis via CAN bus (CAN ID 0x21)
+     * 2-byte signed big-endian value in tenths of °C.
+     * e.g., -2.8°C → -28 → [0xFF, 0xE4]; 0°C → [0x00, 0x00]
+     * Borealis stores this in NVS and applies it to the SHT31 reading.
+     * @param {number} offsetTenths - Signed integer in tenths of °C (-1000 to 1000)
+     * @returns {boolean} Success status
+     */
+    publishBorealisCalibration(offsetTenths) {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish Borealis calibration');
+            return false;
+        }
+
+        // Clamp to int16 range
+        const clamped = Math.max(-32768, Math.min(32767, Math.round(offsetTenths)));
+        // Convert to unsigned for byte extraction
+        const unsigned = clamped < 0 ? clamped + 0x10000 : clamped;
+        const highByte = (unsigned >> 8) & 0xFF;
+        const lowByte = unsigned & 0xFF;
+
+        console.log(`[Borealis] Sending calibration offset: ${clamped} tenths (${clamped / 10}°C) → [0x${highByte.toString(16).padStart(2, '0')}, 0x${lowByte.toString(16).padStart(2, '0')}]`);
+        return this.publishCanMessage(0x21, [highByte, lowByte]);
+    }
+
     // Handle cloud reconnect trigger — re-publish config snapshot
     async handleConfigSyncTrigger() {
         try {

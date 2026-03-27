@@ -27,8 +27,9 @@ device:
 image:
   name: trailcurrent-cm5-base
   boot_part_size: 200%
-  # Compact image — first-boot expands root partition to fill the NVMe
-  root_part_size: 300%
+  # Image includes ~25GB map tiles + ~1GB Docker images. Keep the image
+  # compact (10% headroom) — first-boot expands root to fill the NVMe.
+  root_part_size: 110%
 
 layer:
   base: trailcurrent-base

@@ -193,15 +193,19 @@ else
     log "  Created virtual environment at $VENV_PATH"
 fi
 
-# Install base Python dependencies (full list comes with deployment)
-sudo -u "$TC_USER" "$VENV_PATH/bin/pip" install -q \
-    paho-mqtt==2.1.0 \
-    python-can==4.6.1 \
-    pymongo==4.10.1 \
-    python-dotenv==1.0.1 \
-    packaging==25.0 \
-    typing_extensions==4.15.0 \
-    wrapt==1.17.3
+# Install Python dependencies from baked-in requirements or fall back to base set
+if [ -f "$TC_HOME/local_code/requirements.txt" ]; then
+    sudo -u "$TC_USER" "$VENV_PATH/bin/pip" install -q -r "$TC_HOME/local_code/requirements.txt"
+else
+    sudo -u "$TC_USER" "$VENV_PATH/bin/pip" install -q \
+        paho-mqtt==2.1.0 \
+        python-can==4.6.1 \
+        pymongo==4.10.1 \
+        python-dotenv==1.0.1 \
+        packaging==25.0 \
+        typing_extensions==4.15.0 \
+        wrapt==1.17.3
+fi
 
 log "  Python dependencies installed"
 
