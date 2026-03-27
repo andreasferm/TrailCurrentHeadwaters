@@ -26,7 +26,7 @@ async function syncSwitchbackChannelsToLights(db, mqttService) {
 
     // Filter enabled Switchback modules, sorted deterministically by hostname
     const switchbacks = modules
-        .filter(m => m.type === 'switchback_relay' && m.enabled)
+        .filter(m => (m.type === 'switchback' || m.type === 'switchback_relay') && m.enabled)
         .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''));
 
     const lightsCollection = db.collection('lights');

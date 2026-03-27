@@ -120,12 +120,14 @@
             { "t": "eq", "v": "0x024", "vt": "str" },
             { "t": "eq", "v": "0x02c", "vt": "str" },
             { "t": "eq", "v": "0x028", "vt": "str" },
+            { "t": "eq", "v": "0x029", "vt": "str" },
+            { "t": "eq", "v": "0x02a", "vt": "str" },
             { "t": "eq", "v": "0x030", "vt": "str" },
             { "t": "eq", "v": "0x032", "vt": "str" }
         ],
         "checkall": "true",
         "repair": false,
-        "outputs": 12,
+        "outputs": 14,
         "x": 880,
         "y": 640,
         "wires": [
@@ -162,6 +164,12 @@
             ],
             [
                 "energy_parse_solar_mppt"
+            ],
+            [
+                "relay_status_parse"
+            ],
+            [
+                "relay_status_parse"
             ],
             [
                 "relay_status_parse"

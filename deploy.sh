@@ -21,12 +21,13 @@ VENV_PATH="$HOME/local_code/cantomqtt"
 LOCAL_CODE_DEST="$HOME/local_code"
 
 # Function to deploy firmware to a device via OTA
+# Uses CAN trigger (via MQTT) then HTTP POST of the binary to the module's /ota endpoint
 deploy_firmware() {
     local hostname=$1
     local firmware_path=$2
     local device_name=$3
 
-    # Step 1: Trigger OTA mode via MQTT
+    # Step 1: Trigger OTA mode via MQTT (CAN ID 0x00)
     echo "  Triggering OTA mode for $device_name ($hostname)..."
     "$VENV_PATH/bin/python3" local_code/trigger_ota_mqtt.py "$hostname"
 
@@ -35,43 +36,17 @@ deploy_firmware() {
         return 1
     fi
 
-    # Step 2: Wait for device to enter OTA mode (8-10 seconds)
+    # Step 2: Wait for device to enter OTA mode and start HTTP server
     echo "  Waiting for $hostname to enter OTA mode..."
     sleep 8
 
-    # Step 3: Use bundled espota.py
-    ESPOTA="local_code/espota.py"
-    if [ ! -f "$ESPOTA" ]; then
-        echo "  espota.py not found at $ESPOTA"
-        return 1
-    fi
+    # Step 3: POST firmware binary to the module's /ota endpoint
+    echo "  Uploading firmware to $hostname via HTTP..."
+    curl -sf -X POST "http://${hostname}.local/ota" \
+        --data-binary "@${firmware_path}" \
+        --connect-timeout 10 \
+        --max-time 180
 
-    # Step 4: Determine the Pi's IP address for OTA upload
-    UPLOAD_IP=$(python3 -c "
-import socket
-try:
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(('8.8.8.8', 80))
-    ip = s.getsockname()[0]
-    s.close()
-    print(ip)
-except:
-    try:
-        print(socket.gethostbyname(socket.gethostname()))
-    except:
-        print('127.0.0.1')
-" 2>/dev/null)
-
-    if [ -z "$UPLOAD_IP" ] || [ "$UPLOAD_IP" = "127.0.0.1" ]; then
-        echo "  Warning: Could not determine Pi IP, using hostname: $TLS_HOSTNAME"
-        UPLOAD_IP="$TLS_HOSTNAME"
-    fi
-
-    # Step 5: Push firmware using espota.py
-    echo "  Uploading firmware to $hostname (using $UPLOAD_IP as upload server)..."
-    python3 "$ESPOTA" -i "$hostname" -I "$UPLOAD_IP" -f "$firmware_path" -d
-
-    # Step 6: Verify (check exit code)
     if [ $? -eq 0 ]; then
         echo "  Successfully deployed firmware to $device_name"
         return 0
@@ -277,6 +252,19 @@ else
     echo "  ERROR: local_code/can-to-mqtt.service not found"
 fi
 
+# Install/restart discovery mDNS browser service
+if [ -f "local_code/discovery-mdns.service" ]; then
+    sudo cp local_code/discovery-mdns.service /etc/systemd/system/discovery-mdns.service
+    sudo systemctl daemon-reload
+    if sudo systemctl is-enabled --quiet discovery-mdns.service 2>/dev/null; then
+        sudo systemctl restart discovery-mdns.service
+        echo "  discovery-mdns.service updated and restarted"
+    else
+        sudo systemctl enable --now discovery-mdns.service
+        echo "  discovery-mdns.service installed and started"
+    fi
+fi
+
 # Wait for cantomqtt to initialize (connect to MQTT broker and CAN bus)
 echo "  Waiting for CAN-to-MQTT bridge to initialize..."
 sleep 5
@@ -364,6 +352,13 @@ echo "Step 7: Deploying MCU firmware (if present)..."
 # never deletes old files).
 FIRMWARE_INCLUDED=$(cat .firmware-included 2>/dev/null)
 if [ "$FIRMWARE_INCLUDED" = "yes" ] && [ -f "local_code/trigger_ota_mqtt.py" ]; then
+    # Copy firmware files to data/firmware so the backend can serve them for UI-triggered OTA
+    if [ -d "firmware" ]; then
+        mkdir -p data/firmware
+        find firmware -name "*.bin" -exec cp {} data/firmware/ \;
+        echo "  Copied firmware files to data/firmware/ for UI access"
+    fi
+
     echo "  Firmware directory found, querying enabled devices..."
 
     # Query MongoDB for enabled modules via Docker (MongoDB is not exposed to host)

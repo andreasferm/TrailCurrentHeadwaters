@@ -18,6 +18,7 @@ mmdebstrap:
     - can-utils
     - avahi-daemon
     - avahi-utils
+    - libnss-mdns
     - curl
     - unzip
     - nvme-cli

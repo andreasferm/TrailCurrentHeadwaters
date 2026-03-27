@@ -37,6 +37,7 @@ containers/tileserver/generate/
 EDA/**/*.zip
 images/*
 firmware/
+data/firmware/*.bin
 trailcurrent-deployment*.zip
 trailcurrent-deployment-staging/
 

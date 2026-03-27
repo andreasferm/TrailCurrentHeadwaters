@@ -1,28 +1,15 @@
 // Configuration Wizard page
 import { API } from '../api.js';
+import { wsClient } from '../api.js';
 
 let systemConfig = null;
 let currentStep = 1;
 let step2ListenersAttached = false;
-
-const MCU_MODULES = [
-    { id: 'fireside', name: 'Fireside' },
-    { id: 'spotter', name: 'Spotter' },
-    { id: 'milepost', name: 'Milepost' },
-    { id: 'solstice', name: 'Solstice' },
-    { id: 'ampline', name: 'Ampline' },
-    { id: 'torrent', name: 'Torrent' },
-    { id: 'tapper', name: 'Tapper' },
-    { id: 'resivoir', name: 'Resivoir' },
-    { id: 'borealis', name: 'Borealis' },
-    { id: 'aftline', name: 'Aftline' },
-    { id: 'picket', name: 'Picket' },
-    { id: 'bearing', name: 'Bearing' },
-    { id: 'therma', name: 'Therma' }
-];
-
-// Build display name lookup from the module list
-const MODULE_DISPLAY_NAMES = Object.fromEntries(MCU_MODULES.map(m => [m.id, m.name]));
+let discoveryActive = false;
+let discoveryListener = null;
+let discoveryTimeout = null;
+let moduleTypes = [];
+let moduleDisplayNames = {};
 
 export const wizardPage = {
     render() {
@@ -37,7 +24,7 @@ export const wizardPage = {
                         </div>
                         <div class="wizard-step-indicator step-2">
                             <div class="step-number">2</div>
-                            <div class="step-label">MCU Modules</div>
+                            <div class="step-label">Discover Modules</div>
                         </div>
                         <div class="wizard-step-indicator step-3">
                             <div class="step-number">3</div>
@@ -66,8 +53,14 @@ export const wizardPage = {
 
     async init() {
         try {
-            // Load system configuration
-            systemConfig = await API.getSystemConfig();
+            // Load system configuration and module types
+            const [configData, typesData] = await Promise.all([
+                API.getSystemConfig(),
+                API.getModuleTypes()
+            ]);
+            systemConfig = configData;
+            moduleTypes = typesData;
+            moduleDisplayNames = Object.fromEntries(moduleTypes.map(m => [m.id, m.name]));
             currentStep = 1;
 
             // Initialize mcu_modules if not present
@@ -182,55 +175,24 @@ export const wizardPage = {
 
         return `
             <div class="wizard-step">
-                <h2 class="wizard-title">MCU Modules Configuration</h2>
+                <h2 class="wizard-title">Discover Modules</h2>
                 <p class="wizard-description">
-                    Add the MCU modules that are part of your system. You can add them later if needed.
+                    Scan for TrailCurrent modules on the CAN bus. Plug in a module, then click "Scan for Devices" to detect it.
                 </p>
 
-                <!-- Add Module Form (initially hidden) -->
-                <div id="add-module-form" class="wizard-form module-form hidden">
-                    <div class="wizard-field">
-                        <label class="wizard-label" for="module-type">Module Type</label>
-                        <select id="module-type" class="wizard-input">
-                            <option value="">-- Select a module type --</option>
-                            ${MCU_MODULES.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
-                        </select>
-                        <div id="module-type-error" class="wizard-error hidden"></div>
-                    </div>
-
-                    <div class="wizard-field">
-                        <label class="wizard-label" for="module-name">Friendly Name</label>
-                        <input type="text"
-                               id="module-name"
-                               class="wizard-input"
-                               placeholder="e.g., Cabin Air Quality"
-                               maxlength="50">
-                        <p class="wizard-field-hint">A descriptive name for this module instance</p>
-                        <div id="module-name-error" class="wizard-error hidden"></div>
-                    </div>
-
-                    <div class="wizard-field">
-                        <label class="wizard-label" for="module-hostname">Hostname</label>
-                        <input type="text"
-                               id="module-hostname"
-                               class="wizard-input"
-                               placeholder="e.g., airquality-01"
-                               maxlength="50">
-                        <p class="wizard-field-hint">Device hostname containing chipid for CAN bus identification</p>
-                        <div id="module-hostname-error" class="wizard-error hidden"></div>
-                    </div>
-
-                    <div class="wizard-field-actions">
-                        <button class="wizard-btn wizard-btn-secondary" id="module-cancel-btn">
-                            Cancel
-                        </button>
-                        <button class="wizard-btn wizard-btn-primary" id="module-add-btn">
-                            Add Module
-                        </button>
-                    </div>
+                <!-- Discovery status area -->
+                <div id="discovery-status" class="discovery-status hidden">
+                    <div class="discovery-spinner"></div>
+                    <span class="discovery-status-text">Scanning for modules...</span>
                 </div>
 
-                <!-- Modules List -->
+                <!-- Discovered modules (pending confirmation) -->
+                <div id="discovered-modules" class="discovered-modules"></div>
+
+                <!-- Discovery error -->
+                <div id="discovery-error" class="wizard-error hidden"></div>
+
+                <!-- Confirmed modules list -->
                 <div id="modules-list" class="modules-list">
                     ${modules.length > 0 ? `
                         <div class="modules-header">
@@ -240,28 +202,28 @@ export const wizardPage = {
                             ${modules.map((mod, idx) => `
                                 <div class="module-item">
                                     <div class="module-info">
-                                        <div class="module-type">${MODULE_DISPLAY_NAMES[mod.type] || mod.type}</div>
+                                        <div class="module-type">${moduleDisplayNames[mod.type] || mod.type}</div>
                                         <div class="module-details">
                                             <div class="module-name">${mod.name}</div>
-                                            <div class="module-hostname">${mod.hostname}</div>
+                                            <div class="module-hostname">${mod.hostname}${mod.fw ? ` &middot; v${mod.fw}` : ''}</div>
                                         </div>
                                     </div>
-                                    <button class="module-delete-btn" data-index="${idx}" title="Delete module">
-                                        <span>×</span>
+                                    <button class="module-delete-btn" data-index="${idx}" title="Remove module">
+                                        <span>&times;</span>
                                     </button>
                                 </div>
                             `).join('')}
                         </div>
                     ` : `
                         <div class="modules-empty">
-                            <p>No modules added yet. Click below to add your first module.</p>
+                            <p>No modules added yet. Click below to scan for modules.</p>
                         </div>
                     `}
                 </div>
 
-                <!-- Add Module Button (visible when form is hidden) -->
-                <button class="wizard-btn wizard-btn-primary" id="add-module-btn" style="width: 100%;">
-                    + Add Module
+                <!-- Scan button -->
+                <button class="wizard-btn wizard-btn-primary" id="discovery-scan-btn" style="width: 100%;">
+                    ${discoveryActive ? 'Stop Scanning' : 'Scan for Devices'}
                 </button>
             </div>
         `;
@@ -296,9 +258,9 @@ export const wizardPage = {
                             <div class="summary-modules">
                                 ${modules.map(mod => `
                                     <div class="summary-module-item">
-                                        <span class="summary-module-type">${MODULE_DISPLAY_NAMES[mod.type] || mod.type}</span>
+                                        <span class="summary-module-type">${moduleDisplayNames[mod.type] || mod.type}</span>
                                         <span class="summary-module-name">${mod.name}</span>
-                                        <span class="summary-module-hostname">${mod.hostname}</span>
+                                        <span class="summary-module-hostname">${mod.hostname}${mod.fw ? ` &middot; v${mod.fw}` : ''}</span>
                                     </div>
                                 `).join('')}
                             </div>
@@ -333,33 +295,27 @@ export const wizardPage = {
     },
 
     attachStep2Listeners() {
-        // Prevent duplicate listener attachment
-        if (step2ListenersAttached) {
-            return;
-        }
+        if (step2ListenersAttached) return;
 
         const wizardContent = document.getElementById('wizard-content');
         if (!wizardContent) return;
 
-        // Use event delegation on wizard-content to handle all step 2 button clicks
-        // This prevents duplicate listeners when step 2 is re-rendered
         wizardContent.addEventListener('click', (e) => {
-            const addModuleBtn = e.target.closest('#add-module-btn');
-            const moduleAddBtn = e.target.closest('#module-add-btn');
-            const moduleCancelBtn = e.target.closest('#module-cancel-btn');
-            const moduleDeleteBtn = e.target.closest('.module-delete-btn');
+            const scanBtn = e.target.closest('#discovery-scan-btn');
+            const confirmBtn = e.target.closest('.discovery-confirm-btn');
+            const deleteBtn = e.target.closest('.module-delete-btn');
 
-            if (addModuleBtn) {
-                const addModuleForm = document.getElementById('add-module-form');
-                addModuleForm.classList.remove('hidden');
-                addModuleBtn.style.display = 'none';
-                document.getElementById('module-type').focus();
-            } else if (moduleAddBtn) {
-                this.confirmAddModule();
-            } else if (moduleCancelBtn) {
-                this.cancelAddModule();
-            } else if (moduleDeleteBtn) {
-                const index = moduleDeleteBtn.dataset.index;
+            if (scanBtn) {
+                if (discoveryActive) {
+                    this.stopDiscovery();
+                } else {
+                    this.startDiscovery();
+                }
+            } else if (confirmBtn) {
+                const hostname = confirmBtn.dataset.hostname;
+                this.confirmModule(hostname);
+            } else if (deleteBtn) {
+                const index = deleteBtn.dataset.index;
                 this.deleteModule(index);
             }
         });
@@ -367,79 +323,132 @@ export const wizardPage = {
         step2ListenersAttached = true;
     },
 
-    cancelAddModule() {
-        const addModuleForm = document.getElementById('add-module-form');
-        const addModuleBtn = document.getElementById('add-module-btn');
+    async startDiscovery() {
+        const scanBtn = document.getElementById('discovery-scan-btn');
+        const statusEl = document.getElementById('discovery-status');
+        const errorEl = document.getElementById('discovery-error');
 
-        // Clear form
-        document.getElementById('module-type').value = '';
-        document.getElementById('module-name').value = '';
-        document.getElementById('module-hostname').value = '';
+        errorEl.classList.add('hidden');
 
-        // Clear errors
-        document.getElementById('module-type-error').classList.add('hidden');
-        document.getElementById('module-name-error').classList.add('hidden');
-        document.getElementById('module-hostname-error').classList.add('hidden');
+        try {
+            await API.startDiscovery();
 
-        // Hide form, show button
-        addModuleForm.classList.add('hidden');
-        addModuleBtn.style.display = 'block';
+            discoveryActive = true;
+            scanBtn.textContent = 'Stop Scanning';
+            statusEl.classList.remove('hidden');
+
+            // Listen for discovery_found WebSocket events
+            discoveryListener = (data) => {
+                this.onModuleFound(data);
+            };
+            wsClient.on('discovery_found', discoveryListener);
+
+            // Auto-stop after 35 seconds (matches mDNS browse timeout)
+            discoveryTimeout = setTimeout(() => {
+                this.stopDiscovery();
+            }, 35000);
+
+        } catch (error) {
+            console.error('Failed to start discovery:', error);
+            errorEl.textContent = 'Failed to start discovery: ' + error.message;
+            errorEl.classList.remove('hidden');
+        }
     },
 
-    confirmAddModule() {
-        const moduleType = document.getElementById('module-type').value.trim();
-        const moduleName = document.getElementById('module-name').value.trim();
-        const moduleHostname = document.getElementById('module-hostname').value.trim();
+    async stopDiscovery() {
+        const scanBtn = document.getElementById('discovery-scan-btn');
+        const statusEl = document.getElementById('discovery-status');
 
-        // Clear errors
-        document.getElementById('module-type-error').classList.add('hidden');
-        document.getElementById('module-name-error').classList.add('hidden');
-        document.getElementById('module-hostname-error').classList.add('hidden');
-
-        let isValid = true;
-
-        // Validate
-        if (!moduleType) {
-            document.getElementById('module-type-error').textContent = 'Please select a module type';
-            document.getElementById('module-type-error').classList.remove('hidden');
-            isValid = false;
+        try {
+            await API.stopDiscovery();
+        } catch (err) {
+            console.error('Error stopping discovery:', err);
         }
 
-        if (!moduleName) {
-            document.getElementById('module-name-error').textContent = 'Friendly name is required';
-            document.getElementById('module-name-error').classList.remove('hidden');
-            isValid = false;
+        discoveryActive = false;
+
+        if (scanBtn) scanBtn.textContent = 'Scan for Devices';
+        if (statusEl) statusEl.classList.add('hidden');
+
+        if (discoveryListener) {
+            wsClient.off('discovery_found', discoveryListener);
+            discoveryListener = null;
         }
 
-        if (!moduleHostname) {
-            document.getElementById('module-hostname-error').textContent = 'Hostname is required';
-            document.getElementById('module-hostname-error').classList.remove('hidden');
-            isValid = false;
+        if (discoveryTimeout) {
+            clearTimeout(discoveryTimeout);
+            discoveryTimeout = null;
+        }
+    },
+
+    onModuleFound(data) {
+        const container = document.getElementById('discovered-modules');
+        if (!container) return;
+
+        // Skip if already confirmed (in mcu_modules list)
+        const existing = (systemConfig.mcu_modules || []).find(m => m.hostname === data.hostname);
+        if (existing) return;
+
+        // Skip if already shown as discovered
+        if (container.querySelector(`[data-hostname="${data.hostname}"]`)) return;
+
+        const displayName = moduleDisplayNames[data.type] || data.type;
+        const card = document.createElement('div');
+        card.className = 'discovered-module-card';
+        card.dataset.hostname = data.hostname;
+        card.innerHTML = `
+            <div class="discovered-module-info">
+                <span class="discovered-module-type">${displayName}</span>
+                <span class="discovered-module-details">${data.hostname} &middot; addr ${data.addr} &middot; v${data.fw}</span>
+            </div>
+            <button class="wizard-btn wizard-btn-primary discovery-confirm-btn" data-hostname="${data.hostname}">
+                Confirm
+            </button>
+        `;
+
+        container.appendChild(card);
+    },
+
+    async confirmModule(hostname) {
+        const confirmBtn = document.querySelector(`.discovery-confirm-btn[data-hostname="${hostname}"]`);
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Confirming...';
         }
 
-        if (!isValid) {
-            return;
+        try {
+            await API.confirmModule(hostname);
+
+            // Add to local config
+            if (!systemConfig.mcu_modules) systemConfig.mcu_modules = [];
+
+            // Refresh mcu_modules from server (handles auto-naming/renaming)
+            const freshConfig = await API.getSystemConfig();
+            systemConfig.mcu_modules = freshConfig.mcu_modules || [];
+
+            // Remove from discovered list
+            const card = document.querySelector(`.discovered-module-card[data-hostname="${hostname}"]`);
+            if (card) card.remove();
+
+            // Re-render the confirmed modules list
+            this.renderStep(2);
+
+        } catch (error) {
+            console.error('Failed to confirm module:', error);
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Confirm';
+            }
+            const errorEl = document.getElementById('discovery-error');
+            if (errorEl) {
+                errorEl.textContent = 'Failed to confirm module: ' + error.message;
+                errorEl.classList.remove('hidden');
+            }
         }
-
-        // Add module to config
-        if (!systemConfig.mcu_modules) {
-            systemConfig.mcu_modules = [];
-        }
-
-        systemConfig.mcu_modules.push({
-            type: moduleType,
-            name: moduleName,
-            hostname: moduleHostname,
-            enabled: true
-        });
-
-        // Re-render step 2 to show the new module
-        this.renderStep(2);
     },
 
     deleteModule(index) {
         if (!systemConfig.mcu_modules) return;
-
         systemConfig.mcu_modules.splice(index, 1);
         this.renderStep(2);
     },
@@ -459,22 +468,34 @@ export const wizardPage = {
 
     async handleNext() {
         if (currentStep === 1) {
-            // Validate step 1
-            if (!this.validateStep1()) {
-                return;
+            if (!this.validateStep1()) return;
+            // Save WiFi credentials now so they're available for discovery in step 2
+            if (systemConfig.wifi_ssid && systemConfig.wifi_password) {
+                try {
+                    await API.updateSystemConfig({
+                        wifi_ssid: systemConfig.wifi_ssid,
+                        wifi_password: systemConfig.wifi_password
+                    });
+                } catch (err) {
+                    console.error('Failed to save WiFi config:', err);
+                }
             }
-            // Move to step 2
             this.renderStep(2);
         } else if (currentStep === 2) {
-            // Move to step 3 (no validation needed - modules are optional)
+            // Stop discovery if active before moving on
+            if (discoveryActive) {
+                await this.stopDiscovery();
+            }
             this.renderStep(3);
         } else if (currentStep === 3) {
-            // Complete wizard
             await this.completeWizard();
         }
     },
 
     handleBack() {
+        if (currentStep === 2 && discoveryActive) {
+            this.stopDiscovery();
+        }
         if (currentStep > 1) {
             this.renderStep(currentStep - 1);
         }
@@ -535,6 +556,9 @@ export const wizardPage = {
     },
 
     cleanup() {
+        if (discoveryActive) {
+            this.stopDiscovery();
+        }
         systemConfig = null;
         currentStep = 1;
     }

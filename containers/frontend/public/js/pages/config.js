@@ -1,5 +1,5 @@
 // Module Configuration page
-import { API } from '../api.js';
+import { API, wsClient } from '../api.js';
 import { ICON_LIST } from '../components/pdm-icons.js';
 
 let systemConfig = null;
@@ -7,6 +7,10 @@ let modules = [];
 let moduleTypes = [];
 let editingModule = null;
 let isToggleInProgress = false;
+let configDiscoveryActive = false;
+let configDiscoveryListener = null;
+let configDiscoveryTimeout = null;
+let otaProgressListener = null;
 let configContainerClickListener = null;
 let formSubmitListener = null;
 let addBtnListener = null;
@@ -26,31 +30,25 @@ export const configPage = {
             <section class="page-config">
                 <h1 class="section-title">Configuration</h1>
 
-                <!-- OTA Testing Section -->
+                <!-- Firmware Management Section -->
                 <div class="card ota-testing-card">
                     <div class="ota-testing-section">
-                        <h2 class="subsection-title">OTA Testing</h2>
-                        <p class="ota-testing-description">Trigger OTA firmware update for a device</p>
+                        <h2 class="subsection-title">Firmware Management</h2>
+                        <p class="ota-testing-description">Upload firmware files and update modules</p>
 
                         <div class="ota-form-group">
-                            <label for="ota-hostname" class="form-label">Device Hostname</label>
-                            <input type="text" id="ota-hostname" class="form-input"
-                                   placeholder="e.g., esp32-8A3B4C"
-                                   pattern="^esp32-[0-9A-Fa-f]{6}$"
-                                   title="Format: esp32-XXYYZZ (where XX, YY, ZZ are hex digits)">
-                            <p class="form-hint">Enter device hostname in format: esp32-XXYYZZ</p>
-                        </div>
-
-                        <div class="ota-mac-display hidden" id="ota-mac-display">
-                            <p class="ota-mac-label">MAC Address Bytes:</p>
-                            <p class="ota-mac-bytes" id="ota-mac-bytes"></p>
+                            <label class="form-label">Upload Firmware</label>
+                            <input type="file" id="firmware-file-input" accept=".bin" class="form-input" style="padding: 8px;">
+                            <p class="form-hint">Select a .bin firmware file to upload</p>
                         </div>
 
                         <div class="ota-form-actions">
-                            <button class="ota-trigger-btn" id="ota-trigger-btn" disabled>
-                                Trigger OTA
+                            <button class="ota-trigger-btn" id="firmware-upload-btn" disabled>
+                                Upload Firmware
                             </button>
                         </div>
+
+                        <div id="firmware-list" class="firmware-list"></div>
 
                         <div id="ota-message" class="ota-message hidden"></div>
                     </div>
@@ -194,7 +192,7 @@ export const configPage = {
             return `
                 <div class="empty-state">
                     <p>No modules configured yet</p>
-                    <p class="empty-state-hint">Click "Add Module" to create your first module</p>
+                    <p class="empty-state-hint">Click "Scan for Devices" to discover modules on the CAN bus</p>
                 </div>
             `;
         }
@@ -207,10 +205,12 @@ export const configPage = {
                             <div class="module-header">
                                 <h3 class="module-name">${escapeHtml(module.name)}</h3>
                                 <span class="module-type-badge">${escapeHtml(getModuleDisplayName(module.type))}</span>
+                                ${module.fw ? `<span class="module-fw-badge">v${escapeHtml(module.fw)}</span>` : ''}
                             </div>
                             <p class="module-description">
-                                ${module.hostname ? `<span class="module-hostname">Hostname: ${escapeHtml(module.hostname)}</span> • ` : ''}${module.enabled ? '✓ Enabled' : '○ Disabled'}
+                                ${module.hostname ? `<span class="module-hostname">${escapeHtml(module.hostname)}</span>` : ''}${module.canid ? ` &middot; CAN ${escapeHtml(module.canid)}` : ''} &middot; ${module.enabled ? 'Enabled' : 'Disabled'}
                             </p>
+                            <div class="module-ota-status hidden" id="ota-status-${idx}"></div>
                         </div>
                         <div class="module-actions">
                             <button class="toggle-switch ${module.enabled ? 'active' : ''}"
@@ -219,6 +219,18 @@ export const configPage = {
                                     title="${module.enabled ? 'Disable' : 'Enable'} module"
                                     aria-pressed="${module.enabled}">
                             </button>
+                            ${module.hostname ? `
+                            <button class="module-action-btn module-ota-btn"
+                                    data-module-index="${idx}"
+                                    data-action="ota"
+                                    title="Update firmware">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                            </button>
+                            ` : ''}
                             <button class="module-action-btn module-edit-btn"
                                     data-module-index="${idx}"
                                     data-action="edit"
@@ -265,17 +277,24 @@ export const configPage = {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                             <path d="M12 5v14M5 12h14"></path>
                         </svg>
-                        Add Module
+                        Scan for Devices
                     </button>
                 </div>
+                <div id="config-discovery-status" class="discovery-status hidden">
+                    <div class="discovery-spinner"></div>
+                    <span class="discovery-status-text">Scanning for modules...</span>
+                </div>
+                <div id="config-discovered-modules" class="discovered-modules"></div>
                 ${this.renderModuleList(modules)}
             `;
 
             // Setup listeners
             this.setupListeners();
-            this.setupOtaListeners();
+            this.setupFirmwareListeners();
             this.setupWirelessListeners();
             this.loadWirelessConfig();
+            this.loadFirmwareList();
+            this.setupOtaProgressListener();
         } catch (error) {
             console.error('Failed to load configuration:', error);
             const configEl = document.getElementById('config-container');
@@ -285,20 +304,128 @@ export const configPage = {
         }
     },
 
-    setupOtaListeners() {
-        const hostnameInput = document.getElementById('ota-hostname');
-        const triggerBtn = document.getElementById('ota-trigger-btn');
+    setupFirmwareListeners() {
+        const fileInput = document.getElementById('firmware-file-input');
+        const uploadBtn = document.getElementById('firmware-upload-btn');
 
-        if (hostnameInput) {
-            hostnameInput.addEventListener('input', (e) => {
-                this.handleHostnameInput(e);
+        if (fileInput) {
+            fileInput.addEventListener('change', () => {
+                if (uploadBtn) uploadBtn.disabled = !fileInput.files.length;
             });
         }
 
-        if (triggerBtn) {
-            triggerBtn.addEventListener('click', () => {
-                this.handleOtaTrigger();
-            });
+        if (uploadBtn) {
+            uploadBtn.addEventListener('click', () => this.handleFirmwareUpload());
+        }
+    },
+
+    setupOtaProgressListener() {
+        if (otaProgressListener) wsClient.off('ota_progress', otaProgressListener);
+        otaProgressListener = (data) => {
+            // Find module index by hostname
+            const idx = modules.findIndex(m => m.hostname === data.hostname);
+            if (idx === -1) return;
+            const statusEl = document.getElementById(`ota-status-${idx}`);
+            if (statusEl) {
+                statusEl.textContent = data.message || data.status;
+                statusEl.classList.remove('hidden');
+                if (data.status === 'complete') {
+                    statusEl.classList.add('ota-complete');
+                    setTimeout(() => {
+                        statusEl.classList.add('hidden');
+                        this.reloadModules();
+                    }, 3000);
+                } else if (data.status === 'error') {
+                    statusEl.classList.add('ota-error');
+                }
+            }
+        };
+        wsClient.on('ota_progress', otaProgressListener);
+    },
+
+    async handleFirmwareUpload() {
+        const fileInput = document.getElementById('firmware-file-input');
+        const uploadBtn = document.getElementById('firmware-upload-btn');
+        if (!fileInput.files.length) return;
+
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading...';
+        this.clearOtaMessage();
+
+        try {
+            const result = await API.uploadFirmware(fileInput.files[0]);
+            this.showOtaMessage(`Uploaded ${result.filename} (${result.size} bytes)`, 'success');
+            fileInput.value = '';
+            this.loadFirmwareList();
+        } catch (error) {
+            this.showOtaMessage(error.message || 'Upload failed', 'error');
+        } finally {
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Upload Firmware';
+        }
+    },
+
+    async loadFirmwareList() {
+        try {
+            const files = await API.listFirmware();
+            const listEl = document.getElementById('firmware-list');
+            if (!listEl) return;
+
+            if (files.length === 0) {
+                listEl.innerHTML = '<p class="form-hint" style="margin-top: 12px;">No firmware files uploaded yet</p>';
+                return;
+            }
+
+            listEl.innerHTML = `
+                <div style="margin-top: 12px;">
+                    <label class="form-label">Available Firmware</label>
+                    ${files.map(f => `
+                        <div class="firmware-file-item">
+                            <span class="firmware-filename">${escapeHtml(f.filename)}</span>
+                            <span class="firmware-size">${(f.size / 1024).toFixed(0)} KB</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } catch (error) {
+            console.error('Failed to load firmware list:', error);
+        }
+    },
+
+    async handleModuleOta(module, moduleIndex) {
+        // Get available firmware files
+        let files;
+        try {
+            files = await API.listFirmware();
+        } catch (err) {
+            this.showOtaMessage('Failed to load firmware list', 'error');
+            return;
+        }
+
+        if (!files.length) {
+            this.showOtaMessage('No firmware files available. Upload a .bin file first.', 'error');
+            return;
+        }
+
+        // Use the most recent firmware file (first in sorted list)
+        const firmwareFile = files[0].filename;
+
+        if (!confirm(`Update ${module.name} (${module.hostname}) with ${firmwareFile}?`)) return;
+
+        const statusEl = document.getElementById(`ota-status-${moduleIndex}`);
+        if (statusEl) {
+            statusEl.textContent = 'Triggering OTA...';
+            statusEl.className = 'module-ota-status';
+        }
+
+        try {
+            await API.triggerOta(module.hostname, firmwareFile);
+            // Progress updates will come via WebSocket
+        } catch (error) {
+            if (statusEl) {
+                statusEl.textContent = 'OTA trigger failed: ' + error.message;
+                statusEl.classList.add('ota-error');
+            }
         }
     },
 
@@ -396,64 +523,6 @@ export const configPage = {
         }
     },
 
-    handleHostnameInput(e) {
-        const input = e.target.value.trim();
-        const triggerBtn = document.getElementById('ota-trigger-btn');
-        const macDisplay = document.getElementById('ota-mac-display');
-        const macBytes = document.getElementById('ota-mac-bytes');
-
-        // Clear message on new input
-        this.clearOtaMessage();
-
-        // Validate hostname format: esp32-XXXXXX where X are hex digits
-        const hostnameRegex = /^esp32-([0-9A-Fa-f]{6})$/;
-        const match = input.match(hostnameRegex);
-
-        if (match) {
-            // Valid hostname format
-            triggerBtn.disabled = false;
-
-            // Extract and display MAC bytes
-            const macHex = match[1];
-            const bytes = [];
-            for (let i = 0; i < 6; i += 2) {
-                const hexByte = macHex.substring(i, i + 2);
-                bytes.push('0x' + hexByte.toUpperCase());
-            }
-            macBytes.textContent = bytes.join(' • ');
-            macDisplay.classList.remove('hidden');
-        } else if (input.length > 0) {
-            // Invalid format
-            triggerBtn.disabled = true;
-            macDisplay.classList.add('hidden');
-        } else {
-            // Empty input
-            triggerBtn.disabled = true;
-            macDisplay.classList.add('hidden');
-        }
-    },
-
-    async handleOtaTrigger() {
-        const input = document.getElementById('ota-hostname');
-        const triggerBtn = document.getElementById('ota-trigger-btn');
-        const hostname = input.value.trim();
-
-        triggerBtn.disabled = true;
-        this.clearOtaMessage();
-
-        try {
-            const response = await API.triggerOta(hostname);
-            this.showOtaMessage(`OTA trigger sent to ${hostname}`, 'success');
-            input.value = '';
-            document.getElementById('ota-mac-display').classList.add('hidden');
-        } catch (error) {
-            const errorMessage = error.message || 'Failed to send OTA trigger';
-            this.showOtaMessage(errorMessage, 'error');
-        } finally {
-            triggerBtn.disabled = true;
-        }
-    },
-
     showOtaMessage(message, type) {
         const messageEl = document.getElementById('ota-message');
         if (messageEl) {
@@ -513,6 +582,16 @@ export const configPage = {
                     }
                 } else if (action === 'delete') {
                     this.handleDeleteModule(moduleIndex);
+                } else if (action === 'ota') {
+                    const module = modules[moduleIndex];
+                    if (module) {
+                        this.handleModuleOta(module, moduleIndex);
+                    }
+                } else if (action === 'confirm-discovered') {
+                    const hostname = btn.dataset.hostname;
+                    if (hostname) {
+                        this.confirmDiscoveredModule(hostname);
+                    }
                 }
             };
 
@@ -560,27 +639,108 @@ export const configPage = {
     },
 
     showAddModuleModal() {
-        editingModule = null;
-        const modal = document.getElementById('module-modal');
-        const backdrop = document.getElementById('modal-backdrop');
-        const title = document.getElementById('modal-title');
-        const submitBtn = document.getElementById('modal-submit-btn');
+        // Instead of opening a modal, start discovery
+        if (configDiscoveryActive) {
+            this.stopConfigDiscovery();
+        } else {
+            this.startConfigDiscovery();
+        }
+    },
 
-        title.textContent = 'Add Module';
-        submitBtn.textContent = 'Add Module';
+    async startConfigDiscovery() {
+        const scanBtn = document.getElementById('add-module-btn');
+        const statusEl = document.getElementById('config-discovery-status');
 
-        // Reset form
-        this.resetForm();
+        try {
+            await API.startDiscovery();
+            configDiscoveryActive = true;
 
-        // Populate module types
-        this.populateModuleTypes();
+            if (scanBtn) {
+                scanBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    </svg>
+                    Stop Scanning
+                `;
+            }
+            if (statusEl) statusEl.classList.remove('hidden');
 
-        // Reset PDM channels UI
-        this.togglePdmChannelsUI('');
+            configDiscoveryListener = (data) => this.onConfigModuleFound(data);
+            wsClient.on('discovery_found', configDiscoveryListener);
 
-        // Show modal
-        modal.style.display = 'flex';
-        backdrop.style.display = 'block';
+            configDiscoveryTimeout = setTimeout(() => this.stopConfigDiscovery(), 35000);
+        } catch (error) {
+            console.error('Failed to start discovery:', error);
+            this.showOtaMessage('Failed to start discovery: ' + error.message, 'error');
+        }
+    },
+
+    async stopConfigDiscovery() {
+        try { await API.stopDiscovery(); } catch (err) { /* ignore */ }
+
+        configDiscoveryActive = false;
+        const scanBtn = document.getElementById('add-module-btn');
+        const statusEl = document.getElementById('config-discovery-status');
+
+        if (scanBtn) {
+            scanBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <path d="M12 5v14M5 12h14"></path>
+                </svg>
+                Scan for Devices
+            `;
+        }
+        if (statusEl) statusEl.classList.add('hidden');
+
+        if (configDiscoveryListener) {
+            wsClient.off('discovery_found', configDiscoveryListener);
+            configDiscoveryListener = null;
+        }
+        if (configDiscoveryTimeout) {
+            clearTimeout(configDiscoveryTimeout);
+            configDiscoveryTimeout = null;
+        }
+    },
+
+    onConfigModuleFound(data) {
+        const container = document.getElementById('config-discovered-modules');
+        if (!container) return;
+
+        // Skip if already in modules list
+        if (modules.some(m => m.hostname === data.hostname)) return;
+        // Skip if already shown
+        if (container.querySelector(`[data-hostname="${data.hostname}"]`)) return;
+
+        const displayName = getModuleDisplayName(data.type);
+        const card = document.createElement('div');
+        card.className = 'discovered-module-card';
+        card.dataset.hostname = data.hostname;
+        card.innerHTML = `
+            <div class="discovered-module-info">
+                <span class="discovered-module-type">${escapeHtml(displayName)}</span>
+                <span class="discovered-module-details">${escapeHtml(data.hostname)} &middot; addr ${data.addr} &middot; v${data.fw}</span>
+            </div>
+            <button class="module-action-btn module-edit-btn" data-hostname="${escapeHtml(data.hostname)}" data-action="confirm-discovered" title="Confirm module">
+                Confirm
+            </button>
+        `;
+        container.appendChild(card);
+    },
+
+    async confirmDiscoveredModule(hostname) {
+        const card = document.querySelector(`.discovered-module-card[data-hostname="${hostname}"]`);
+        const btn = card?.querySelector('[data-action="confirm-discovered"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Confirming...'; }
+
+        try {
+            await API.confirmModule(hostname);
+            if (card) card.remove();
+            await this.reloadModules();
+        } catch (error) {
+            console.error('Failed to confirm module:', error);
+            if (btn) { btn.disabled = false; btn.textContent = 'Confirm'; }
+            this.showOtaMessage('Failed to confirm: ' + error.message, 'error');
+        }
     },
 
     showEditModuleModal(module) {
@@ -596,11 +756,14 @@ export const configPage = {
         // Populate module types first so the select has the right options
         this.populateModuleTypes();
 
-        // Populate form with module data
+        // Populate form with module data — type, name, and hostname are read-only
+        // (set by discovery, not user input)
         document.getElementById('module-type').value = module.type;
-        document.getElementById('module-type').disabled = true; // Can't change type
+        document.getElementById('module-type').disabled = true;
         document.getElementById('module-name').value = module.name;
+        document.getElementById('module-name').disabled = true;
         document.getElementById('module-hostname').value = module.hostname || '';
+        document.getElementById('module-hostname').disabled = true;
 
         // Handle channel-based config (Torrent PDM), leveler, or generic JSON
         if (module.type === 'torrent') {
@@ -654,8 +817,10 @@ export const configPage = {
         const form = document.getElementById('module-form');
         if (form) {
             form.reset();
-            // Re-enable type select
+            // Re-enable fields that may have been disabled
             document.getElementById('module-type').disabled = false;
+            document.getElementById('module-name').disabled = false;
+            document.getElementById('module-hostname').disabled = false;
             document.getElementById('module-hostname').value = '';
         }
         this.clearErrors();
@@ -799,21 +964,23 @@ export const configPage = {
     updateModuleListUI() {
         const configEl = document.getElementById('config-container');
         if (configEl) {
-            const listContainer = configEl.querySelector('.modules-list') || configEl.querySelector('.empty-state');
-            if (listContainer) {
-                listContainer.parentNode.innerHTML = `
-                    <div class="config-actions">
-                        <button class="add-module-btn" id="add-module-btn">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                                <path d="M12 5v14M5 12h14"></path>
-                            </svg>
-                            Add Module
-                        </button>
-                    </div>
-                    ${this.renderModuleList(modules)}
-                `;
-                this.setupListeners();
-            }
+            configEl.innerHTML = `
+                <div class="config-actions">
+                    <button class="add-module-btn" id="add-module-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <path d="M12 5v14M5 12h14"></path>
+                        </svg>
+                        Scan for Devices
+                    </button>
+                </div>
+                <div id="config-discovery-status" class="discovery-status hidden">
+                    <div class="discovery-spinner"></div>
+                    <span class="discovery-status-text">Scanning for modules...</span>
+                </div>
+                <div id="config-discovered-modules" class="discovered-modules"></div>
+                ${this.renderModuleList(modules)}
+            `;
+            this.setupListeners();
         }
     },
 
@@ -892,25 +1059,7 @@ export const configPage = {
         try {
             systemConfig = await API.getSystemConfig();
             modules = systemConfig.mcu_modules || [];
-            const configEl = document.getElementById('config-container');
-            if (configEl) {
-                // Update the modules list
-                const listContainer = configEl.querySelector('.modules-list') || configEl.querySelector('.empty-state');
-                if (listContainer) {
-                    listContainer.parentNode.innerHTML = `
-                        <div class="config-actions">
-                            <button class="add-module-btn" id="add-module-btn">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                                    <path d="M12 5v14M5 12h14"></path>
-                                </svg>
-                                Add Module
-                            </button>
-                        </div>
-                        ${this.renderModuleList(modules)}
-                    `;
-                    this.setupListeners();
-                }
-            }
+            this.updateModuleListUI();
         } catch (error) {
             console.error('Failed to reload modules:', error);
         }
@@ -1044,6 +1193,11 @@ export const configPage = {
     },
 
     cleanup() {
+        if (configDiscoveryActive) this.stopConfigDiscovery();
+        if (otaProgressListener) {
+            wsClient.off('ota_progress', otaProgressListener);
+            otaProgressListener = null;
+        }
         systemConfig = null;
         modules = [];
         moduleTypes = [];

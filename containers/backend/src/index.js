@@ -22,6 +22,7 @@ const modulesRoutes = require('./routes/modules');
 const otaRoutes = require('./routes/ota');
 const plateauRoutes = require('./routes/plateau');
 const smsRoutes = require('./routes/sms');
+const discoveryRoutes = require('./routes/discovery');
 
 const app = express();
 const server = http.createServer(app);
@@ -68,6 +69,7 @@ async function startServer() {
         app.use('/api/ota', otaRoutes(db));
         app.use('/api/plateau', plateauRoutes(db));
         app.use('/api/sms', smsRoutes(db));
+        app.use('/api/discovery', discoveryRoutes(db));
 
         // Error handling middleware
         app.use((err, req, res, next) => {

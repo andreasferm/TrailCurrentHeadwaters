@@ -15,12 +15,13 @@ const MCU_MODULES = [
     { id: 'aftline', name: 'Aftline' },
     { id: 'picket', name: 'Picket' },
     { id: 'bearing', name: 'Bearing' },
-    { id: 'therma', name: 'Therma' }
+    { id: 'therma', name: 'Therma' },
+    { id: 'switchback', name: 'Switchback' }
 ];
 
 const VALID_MODULE_IDS = MCU_MODULES.map(m => m.id);
 
-module.exports = (db) => {
+const createModulesRouter = (db) => {
     const modules = db.collection('modules');
 
     // GET /api/modules - Get all modules
@@ -33,6 +34,9 @@ module.exports = (db) => {
                 name: m.name,
                 type: m.type,
                 hostname: m.hostname || '',
+                addr: m.addr,
+                canid: m.canid || '',
+                fw: m.fw || '',
                 enabled: m.enabled,
                 config: m.config || {},
                 created_at: m.created_at,
@@ -58,7 +62,7 @@ module.exports = (db) => {
     // POST /api/modules - Create a new module
     router.post('/', async (req, res) => {
         try {
-            const { name, type, hostname, config } = req.body;
+            const { name, type, hostname, addr, canid, fw, config } = req.body;
 
             // Validation
             if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -81,6 +85,9 @@ module.exports = (db) => {
                 name: name.trim(),
                 type: type,
                 hostname: hostname.trim(),
+                addr: addr !== undefined ? addr : null,
+                canid: canid || '',
+                fw: fw || '',
                 enabled: true,
                 config: config || {},
                 created_at: new Date(),
@@ -162,6 +169,9 @@ module.exports = (db) => {
                 name: module.name,
                 type: module.type,
                 hostname: module.hostname || '',
+                addr: module.addr,
+                canid: module.canid || '',
+                fw: module.fw || '',
                 enabled: module.enabled,
                 config: module.config || {},
                 created_at: module.created_at,
@@ -198,3 +208,8 @@ module.exports = (db) => {
 
     return router;
 };
+
+createModulesRouter.MCU_MODULES = MCU_MODULES;
+createModulesRouter.VALID_MODULE_IDS = VALID_MODULE_IDS;
+
+module.exports = createModulesRouter;

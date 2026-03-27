@@ -179,6 +179,9 @@ class App {
         };
         window.addEventListener('wizardCompleted', handleWizardCompleted);
 
+        // Connect WebSocket (needed for discovery events in wizard step 2)
+        wsClient.connect();
+
         // Initialize wizard
         wizardPage.init();
     }

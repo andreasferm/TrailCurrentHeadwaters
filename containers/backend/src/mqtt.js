@@ -37,7 +37,12 @@ const TOPICS = {
     LEVEL_STATUS: `${MQTT_ROOT}/${MQTT_LEVEL}/${MSG_STATUS}`,
     CLOUD_CONFIG_CHANGED: 'local/config/cloud_updated',
     SYSTEM_CONFIG_SYNC: 'local/config/system_sync',
-    SYSTEM_CONFIG_SYNC_TRIGGER: 'local/config/system_sync_trigger'
+    SYSTEM_CONFIG_SYNC_TRIGGER: 'local/config/system_sync_trigger',
+    DISCOVERY_BROWSE_START: 'discovery/browse/start',
+    DISCOVERY_BROWSE_STOP: 'discovery/browse/stop',
+    DISCOVERY_BROWSE_FOUND: 'discovery/browse/found',
+    DISCOVERY_CONFIRM_REQUEST: 'discovery/confirm/request',
+    DISCOVERY_CONFIRM_RESPONSE: 'discovery/confirm/response'
 };
 
 class MqttService {
@@ -212,11 +217,39 @@ class MqttService {
                 console.log('Subscribed to config sync trigger topic');
             }
         });
+
+        // Subscribe to discovery browse results (from host-side mDNS browser)
+        this.client.subscribe(TOPICS.DISCOVERY_BROWSE_FOUND, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to discovery browse found:', err);
+            } else {
+                console.log('Subscribed to discovery browse found topic');
+            }
+        });
+
+        // Subscribe to discovery confirm responses (from host-side proxy)
+        this.client.subscribe(TOPICS.DISCOVERY_CONFIRM_RESPONSE, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to discovery confirm response:', err);
+            } else {
+                console.log('Subscribed to discovery confirm response topic');
+            }
+        });
     }
 
     handleMessage(topic, message) {
         try {
             const payload = JSON.parse(message.toString());
+
+            // Handle discovery messages (not under local/ prefix)
+            if (topic === TOPICS.DISCOVERY_BROWSE_FOUND) {
+                this.handleDiscoveryFound(payload);
+                return;
+            }
+            if (topic === TOPICS.DISCOVERY_CONFIRM_RESPONSE) {
+                this.handleDiscoveryConfirmResponse(payload);
+                return;
+            }
 
             // Parse topic to determine type
             const parts = topic.split('/');
@@ -742,6 +775,96 @@ class MqttService {
         const topic = TOPICS.SYSTEM_CONFIG_SYNC;
         console.log(`Publishing system config snapshot to ${topic}`);
         this.client.publish(topic, JSON.stringify(snapshot), { qos: 1, retain: true });
+        return true;
+    }
+
+    // --- Discovery methods ---
+
+    // Handle a module found by the host-side mDNS browser
+    handleDiscoveryFound(payload) {
+        console.log('[Discovery] Module found via mDNS:', payload);
+
+        // Add to ephemeral discovered list
+        const { addDiscoveredModule } = require('./routes/discovery');
+        addDiscoveredModule(payload);
+
+        // Broadcast to frontend via WebSocket
+        if (this.broadcast) {
+            this.broadcast('discovery_found', payload);
+        }
+    }
+
+    // Send CAN 0x02 discovery trigger (broadcast, 0 data bytes)
+    publishDiscoveryTrigger() {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish discovery trigger');
+            return false;
+        }
+        console.log('[Discovery] Broadcasting CAN 0x02 discovery trigger');
+        return this.publishCanMessage(0x02, []);
+    }
+
+    // Send CAN 0x03 discovery reset (targeted by MAC address)
+    publishDiscoveryReset(hostname) {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish discovery reset');
+            return false;
+        }
+
+        const hostnameRegex = /^esp32-([0-9A-Fa-f]{6})$/;
+        const match = hostname.match(hostnameRegex);
+        if (!match) {
+            console.error(`[Discovery] Invalid hostname format for reset: ${hostname}`);
+            return false;
+        }
+
+        const macHex = match[1];
+        const macBytes = [];
+        for (let i = 0; i < 6; i += 2) {
+            macBytes.push(parseInt(macHex.substring(i, i + 2), 16));
+        }
+
+        console.log(`[Discovery] Sending CAN 0x03 discovery reset to ${hostname}`);
+        return this.publishCanMessage(0x03, macBytes);
+    }
+
+    // Tell the host-side mDNS browser to start browsing
+    publishDiscoveryBrowseStart() {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot start discovery browse');
+            return false;
+        }
+        console.log('[Discovery] Starting mDNS browse');
+        this.client.publish(TOPICS.DISCOVERY_BROWSE_START, '{}', { qos: 1 });
+        return true;
+    }
+
+    // Handle confirm response from host-side proxy
+    handleDiscoveryConfirmResponse(payload) {
+        console.log('[Discovery] Confirm response:', payload);
+        const { handleConfirmResponse } = require('./routes/discovery');
+        handleConfirmResponse(payload);
+    }
+
+    // Ask the host-side proxy to confirm a module
+    publishDiscoveryConfirmRequest(hostname) {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish confirm request');
+            return false;
+        }
+        console.log(`[Discovery] Requesting host-side confirm for ${hostname}`);
+        this.client.publish(TOPICS.DISCOVERY_CONFIRM_REQUEST, JSON.stringify({ hostname }), { qos: 1 });
+        return true;
+    }
+
+    // Tell the host-side mDNS browser to stop browsing
+    publishDiscoveryBrowseStop() {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot stop discovery browse');
+            return false;
+        }
+        console.log('[Discovery] Stopping mDNS browse');
+        this.client.publish(TOPICS.DISCOVERY_BROWSE_STOP, '{}', { qos: 1 });
         return true;
     }
 

@@ -5,3 +5,4 @@ typing_extensions==4.15.0
 wrapt==1.17.3
 pymongo==4.10.1
 python-dotenv==1.0.1
+zeroconf==0.146.1

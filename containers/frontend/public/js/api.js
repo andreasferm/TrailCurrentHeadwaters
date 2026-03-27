@@ -277,8 +277,57 @@ class API {
     }
 
     // OTA trigger
-    static async triggerOta(hostname) {
+    static async triggerOta(hostname, firmware_file) {
         return this.request('/ota/trigger', {
+            method: 'POST',
+            body: JSON.stringify({ hostname, firmware_file })
+        });
+    }
+
+    // OTA firmware management
+    static async listFirmware() {
+        return this.request('/ota/firmware');
+    }
+
+    static async uploadFirmware(file) {
+        const url = `${API_BASE}/ota/upload-firmware`;
+        const token = AuthStore.getToken();
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/octet-stream',
+                'X-Firmware-Filename': file.name,
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
+            body: file
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Upload failed');
+        return data;
+    }
+
+    // Discovery
+    static async startDiscovery() {
+        return this.request('/discovery/start', { method: 'POST' });
+    }
+
+    static async getDiscoveredModules() {
+        return this.request('/discovery/found');
+    }
+
+    static async confirmModule(hostname) {
+        return this.request('/discovery/confirm', {
+            method: 'POST',
+            body: JSON.stringify({ hostname })
+        });
+    }
+
+    static async stopDiscovery() {
+        return this.request('/discovery/stop', { method: 'POST' });
+    }
+
+    static async resetModuleDiscovery(hostname) {
+        return this.request('/discovery/reset', {
             method: 'POST',
             body: JSON.stringify({ hostname })
         });
