@@ -77,6 +77,13 @@ export const settingsPage = {
                                    placeholder="rv_... API key from cloud settings"
                                    value="${systemConfig?.cloud_api_key || ''}">
                         </div>
+                        <div class="cloud-config-field">
+                            <label class="password-label" for="settings-cloud-rate-limit">Message Rate Limit (msgs/sec)</label>
+                            <input type="number" id="settings-cloud-rate-limit" class="password-input"
+                                   min="1" max="100"
+                                   placeholder="30"
+                                   value="${systemConfig?.cloud_rate_limit || 30}">
+                        </div>
                         <div id="cloud-config-message" class="password-message hidden"></div>
                         <button class="password-submit-btn" id="save-cloud-config-btn">
                             Save Cloud Settings
@@ -491,6 +498,7 @@ export const settingsPage = {
         const cloudMqttUsername = document.getElementById('settings-cloud-mqtt-username').value.trim();
         const cloudMqttPassword = document.getElementById('settings-cloud-mqtt-password').value;
         const cloudApiKey = document.getElementById('settings-cloud-api-key').value;
+        const cloudRateLimit = parseInt(document.getElementById('settings-cloud-rate-limit').value) || 30;
 
         // Validate URL if cloud is enabled
         if (cloudEnabled && cloudUrl) {
@@ -511,7 +519,8 @@ export const settingsPage = {
                 cloud_url: cloudUrl,
                 cloud_mqtt_username: cloudMqttUsername,
                 cloud_mqtt_password: cloudMqttPassword,
-                cloud_api_key: cloudApiKey
+                cloud_api_key: cloudApiKey,
+                cloud_rate_limit: cloudRateLimit
             });
             this.showCloudConfigMessage('Cloud settings saved successfully', 'success');
         } catch (error) {

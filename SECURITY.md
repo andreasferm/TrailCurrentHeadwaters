@@ -52,9 +52,8 @@ When you run `git commit`:
 ```bash
 # .env (local only, never commit)
 MQTT_PASSWORD=myRealPassword123
-NODE_RED_ADMIN_PASSWORD=myAdminPass
-NODE_RED_CREDENTIAL_SECRET=abc123def456...
-DATABASE_URL=postgresql://user:pass@localhost/db
+ADMIN_PASSWORD=myAdminPass
+ENCRYPTION_KEY=abc123def456...
 ```
 
 **Reference:**

@@ -60,8 +60,6 @@ declare -a IMAGES=(
     "frontend"
     "backend"
     "mosquitto"
-    "node-red"
-    "node-red-proxy"
     "tileserver"
 )
 
@@ -71,8 +69,6 @@ for IMAGE in "${IMAGES[@]}"; do
     IMAGE_NAME="$IMAGE"
     if [ "$IMAGE" = "tileserver" ]; then
         IMAGE_NAME="tile-server"
-    elif [ "$IMAGE" = "node-red-proxy" ]; then
-        IMAGE_NAME="node-red-proxy"
     fi
 
     echo "-------------------------------------------"
@@ -91,14 +87,6 @@ for IMAGE in "${IMAGES[@]}"; do
         mosquitto)
             CONTEXT="containers/mosquitto"
             DOCKERFILE="containers/mosquitto/Dockerfile"
-            ;;
-        node-red)
-            CONTEXT="containers/node-red"
-            DOCKERFILE="containers/node-red/Dockerfile"
-            ;;
-        node-red-proxy)
-            CONTEXT="containers/noderedproxy"
-            DOCKERFILE="containers/noderedproxy/Dockerfile"
             ;;
         tileserver)
             CONTEXT="containers/tileserver"
@@ -129,8 +117,6 @@ for IMAGE in "${IMAGES[@]}"; do
     IMAGE_NAME="$IMAGE"
     if [ "$IMAGE" = "tileserver" ]; then
         IMAGE_NAME="tile-server"
-    elif [ "$IMAGE" = "node-red-proxy" ]; then
-        IMAGE_NAME="node-red-proxy"
     fi
     echo "  - $REGISTRY/$DOCKER_USERNAME/trailcurrent-$IMAGE_NAME:latest"
 done

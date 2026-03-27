@@ -26,9 +26,9 @@ image flashed and configured. It is created on your development machine:
 ```
 
 This produces `trailcurrent-deployment-1.0.0.zip` containing:
-- `images/*.tar` — 7 pre-built ARM64 Docker images (including MongoDB)
+- `images/*.tar` — 5 pre-built ARM64 Docker images (4 custom + MongoDB)
 - `docker-compose.yml` — Service orchestration
-- `config/` — Mosquitto and Node-RED configuration (starter flow version auto-injected from `--version`)
+- `config/` — Mosquitto configuration
 - `local_code/` — Python CAN-to-MQTT bridge and OTA helpers
 - `firmware/wired/` — MCU firmware binaries (if available)
 - `scripts/` — SSL certificate generation
@@ -48,7 +48,7 @@ For devices flashed with the current CM5 image, **no deployment package is
 needed**. The image includes all application artifacts baked in. On first
 SSH login, an interactive setup wizard runs automatically and:
 
-1. Prompts for MQTT, Node-RED, and admin passwords
+1. Prompts for MQTT and admin passwords
 2. Auto-generates encryption keys
 3. Writes `.env` and starts all services
 
@@ -84,7 +84,7 @@ For devices running older images without baked-in application artifacts:
    - Generate TLS certificates automatically using `scripts/generate-certs.sh`
    - Install the CA certificate to the system trust store (for host-side TLS verification)
    - Load all Docker images from tar files
-   - Start all services (the backend auto-injects the starter Node-RED flow on first boot)
+   - Start all services
    - Set up the CAN-to-MQTT bridge
    - Set up the deployment watcher (for cloud OTA updates)
    - Deploy MCU firmware via OTA (if firmware is included)
@@ -97,7 +97,6 @@ For devices running older images without baked-in application artifacts:
    #   ADMIN_PASSWORD
    #   TLS_CERT_HOSTNAME=headwaters.local
    #   ENCRYPTION_KEY=$(openssl rand -hex 32)
-   #   NODE_RED_CREDENTIAL_SECRET=$(openssl rand -hex 64)
    ```
    Then re-run `./deploy.sh`.
 
@@ -180,8 +179,7 @@ When deploying a new version:
    - Stop existing services
    - Update the system CA trust store if certificates were renewed
    - Load updated Docker images
-   - Preserve your `.env`, certificates, map tiles, and Node-RED user flows
-   - Auto-update the CAN Bus Bridge starter flow in Node-RED (version compared on backend startup)
+   - Preserve your `.env`, certificates, and map tiles
    - Restart all services
    - Restart the deployment watcher service
    - Update MCU firmware if new firmware is included
@@ -204,7 +202,6 @@ These items are **PRESERVED** and never deleted by `deploy.sh`:
 
 ### Data
 - `data/tileserver/map.mbtiles` — Map tile database (~25GB)
-- `data/node-red/` — Node-RED runtime data and credentials (the CAN Bus Bridge starter flow is auto-updated by the backend when a newer version is deployed; user-created flows are preserved)
 - MongoDB data volume — All application state
 
 **CRITICAL: Never delete `data/` directory during updates!**
@@ -251,7 +248,7 @@ curl -k -o /dev/null -s -w "%{http_code}" https://localhost/
 ```bash
 # Check logs for specific service
 docker compose logs <service-name>
-# Services: backend, frontend, mosquitto, mongodb, node-red, noderedproxy, tileserver
+# Services: backend, frontend, mosquitto, mongodb, tileserver
 
 # Restart all containers
 docker compose down && docker compose up -d --no-build

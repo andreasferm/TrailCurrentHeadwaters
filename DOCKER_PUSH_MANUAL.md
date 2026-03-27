@@ -14,7 +14,7 @@ docker login
 # 3. Build and push all images
 ./build-and-push.sh
 
-# That's it! All 5 images are now on Docker Hub with :latest tag
+# That's it! All 4 images are now on Docker Hub with :latest tag
 ```
 
 ## Prerequisites
@@ -54,18 +54,17 @@ docker buildx version
 ## How It Works
 
 The `build-and-push.sh` script uses **Docker Buildx** to:
-1. Build all 5 Docker images for **multiple architectures**:
+1. Build all 4 Docker images for **multiple architectures**:
    - `linux/amd64` (your development machine, servers)
-   - `linux/arm64` (Raspberry Pi 5, modern ARM devices)
+   - `linux/arm64` (Raspberry Pi CM5, modern ARM devices)
 2. Tag them as `:latest` for testing
 3. Push to Docker Hub (all architectures in one push)
 
 **Note:** The builds take longer than single-architecture builds, but creates images that work on ARM Raspberry Pis AND traditional x86 machines.
 
 **Architecture Support:**
-- ✅ `linux/amd64` - x86-64 servers and development machines
-- ✅ `linux/arm64` - 64-bit ARM (Raspberry Pi 5, modern ARM devices)
-- ❌ `linux/arm/v7` - Not supported (Node.js 24+ dropped 32-bit ARM support)
+- `linux/amd64` - x86-64 servers and development machines
+- `linux/arm64` - 64-bit ARM (Raspberry Pi CM5, modern ARM devices)
 
 ## Usage
 
@@ -75,12 +74,11 @@ The `build-and-push.sh` script uses **Docker Buildx** to:
 ./build-and-push.sh
 ```
 
-This will build and push all 5 images to Docker Hub with the `:latest` tag:
+This will build and push all 4 images to Docker Hub with the `:latest` tag:
 - Build and push `<username>/trailcurrent-frontend:latest`
 - Build and push `<username>/trailcurrent-backend:latest`
 - Build and push `<username>/trailcurrent-mosquitto:latest`
-- Build and push `<username>/trailcurrent-node-red:latest`
-- Build and push `<username>/trailcurrent-node-red-proxy:latest`
+- Build and push `<username>/trailcurrent-tile-server:latest`
 
 (Where `<username>` is your Docker Hub username configured in `build-and-push.sh`)
 
@@ -92,8 +90,7 @@ Create these **public** repositories on [Docker Hub](https://hub.docker.com):
 - `trailcurrent-frontend`
 - `trailcurrent-backend`
 - `trailcurrent-mosquitto`
-- `trailcurrent-node-red`
-- `trailcurrent-node-red-proxy`
+- `trailcurrent-tile-server`
 
 (Just create empty repos, the script will populate them)
 
@@ -110,7 +107,7 @@ docker login
 ./build-and-push.sh
 ```
 
-Monitor the output - it will build and push all 5 images with the `:latest` tag.
+Monitor the output - it will build and push all 4 images with the `:latest` tag.
 
 ## Verifying Success
 
@@ -148,14 +145,14 @@ docker push <username>/trailcurrent-frontend:latest
 ## Understanding Docker Buildx
 
 **What is buildx?**
-- Docker Buildx enables building images for multiple architectures (AMD64, ARM64, ARM32)
+- Docker Buildx enables building images for multiple architectures (AMD64, ARM64)
 - Single command builds for all architectures and pushes to registry
-- Required for Raspberry Pi support
+- Required for Raspberry Pi CM5 support
 
 **Why it's needed:**
 - Regular `docker build` only builds for your current machine's architecture
 - Buildx cross-compiles and creates multi-architecture images
-- Users on Raspberry Pi automatically get the correct ARM64 image
+- Users on Raspberry Pi CM5 automatically get the correct ARM64 image
 
 **Performance notes:**
 - Building for multiple architectures takes longer (15-30 minutes vs 2-5 minutes)
@@ -204,9 +201,9 @@ docker login
 git commit -m "Add new feature"
 
 # 2. Test locally
-docker-compose up -d
+docker compose up -d --build
 # ... test thoroughly ...
-docker-compose down
+docker compose down
 
 # 3. When ready to test on Docker Hub
 # Build and push to Docker Hub with :latest tag

@@ -29,7 +29,7 @@ expanded to fill the entire drive on first boot.
 Application data directories:
 
 ```
-~/data           (keys, tileserver, node-red)
+~/data           (keys, tileserver)
 ~/local_code     (Python venv, CAN-to-MQTT scripts)
 ```
 
@@ -80,9 +80,8 @@ cd CM5/usbboot/recovery5
 ./update-pieeprom.sh
 ```
 
-This bakes `boot.conf` (which sets `BOOT_ORDER=0xf16` — NVMe first, SD
-fallback) into an EEPROM image. The output is used in the per-device
-procedure below.
+This bakes `boot.conf` (which sets `BOOT_ORDER=0xfe6` — NVMe only) into an
+EEPROM image. The output is used in the per-device procedure below.
 
 ### 3. Build the Docker Images (ARM64)
 
@@ -95,7 +94,7 @@ images first:
 ./build-and-save-images.sh
 ```
 
-This cross-compiles all 6 service images for `linux/arm64` (plus
+This cross-compiles all 4 service images for `linux/arm64` (plus
 `mongo:7`) and saves them as tar files in `images/`. Takes ~10 minutes
 on the first run.
 
@@ -133,7 +132,7 @@ and generates encryption keys).
 | `images/*.tar` | Step 3 (`build-and-save-images.sh`) | Docker container images |
 | `data/tileserver/map.mbtiles` | Step 4 | Map tile data (~25 GB) |
 | `docker-compose.yml` | In repo | Service orchestration |
-| `config/` | In repo | Mosquitto and Node-RED configuration |
+| `config/` | In repo | Mosquitto configuration |
 | `local_code/` | In repo | Python CAN-to-MQTT bridge and helpers |
 | `scripts/` | In repo | Certificate generation scripts |
 
@@ -241,7 +240,7 @@ sudo dd if=/dev/zero of=/dev/sdY bs=4M count=100 status=progress conv=fsync
 This zeros the first 400 MB, which destroys partition tables, boot sectors,
 and filesystem headers.
 
-**Power cycle the carrier board** before the next step. **Be sure to hold the boot button again when plugging in**
+**Power cycle the carrier board** before the next step.
 
 ### Step 4: Flash the NVMe
 
@@ -268,6 +267,7 @@ lsblk
 
 Unmount any auto-mounted partitions, then write the image:
 
+**NOTE!!!** This can take a really long time depending on NVME speed. Wait for it to complete and exit back to shell. Otherwise you will corrupt the NVME and have to start over **IMPORTANT**
 ```bash
 sudo umount /dev/sdX* 2>/dev/null
 #cd to root of project
@@ -302,8 +302,8 @@ The CM5 boots from NVMe. On the first boot, two services run automatically:
    (no power button needed in a vehicle install).
 
 3. **TLS certificates** — Generates a self-signed CA and server certificate
-   for `headwaters.local` (valid 10 years). Used by Mosquitto, Node-RED proxy,
-   and the frontend.
+   for `headwaters.local` (valid 10 years). Used by Mosquitto and the
+   frontend.
 
 4. **Python virtual environment** — Creates the venv at
    `~/local_code/cantomqtt/` and installs Python dependencies.
@@ -340,13 +340,11 @@ ssh trailcurrent@headwaters.local
 
 The wizard will prompt you for:
 - **MQTT username and password** (default username: `trailcurrent`)
-- **Node-RED admin username and password** (default username: `admin`)
 - **Admin password** (for the web UI)
 - **Device hostname** (default: `headwaters.local`)
 
 The wizard **automatically generates** cryptographic secrets:
 - `ENCRYPTION_KEY` (WiFi credential encryption, 32 bytes)
-- `NODE_RED_CREDENTIAL_SECRET` (Node-RED credential encryption, 64 bytes)
 
 After collecting your inputs, the wizard:
 1. Writes `.env` and `local_code/.env`
@@ -442,7 +440,7 @@ These are copied into `/home/trailcurrent/` during the image build:
 | Path | Source | Purpose |
 |------|--------|---------|
 | `~/docker-compose.yml` | Repo root | Service orchestration |
-| `~/config/` | `config/` | Mosquitto and Node-RED configuration |
+| `~/config/` | `config/` | Mosquitto configuration |
 | `~/local_code/` | `local_code/` | Python scripts, systemd units, requirements |
 | `~/scripts/` | `scripts/` | Certificate generation |
 | `~/deploy.sh` | Repo root | For future OTA deployments |
@@ -455,7 +453,7 @@ These are copied into `/home/trailcurrent/` during the image build:
 | Setting | Value | Purpose |
 |---------|-------|---------|
 | `dtparam=spi=on` | enabled | Required for MCP2515 CAN controller |
-| `dtoverlay=mcp2515-can0` | 12MHz/GPIO25/2MHz SPI | CAN bus hardware |
+| `dtoverlay=mcp2515-can0` | 16MHz/GPIO25/2MHz SPI | CAN bus hardware |
 | `dtoverlay=disable-bt` | disabled | Power savings |
 | `dtoverlay=disable-wifi` | disabled | Power savings (uses Ethernet) |
 | `dtoverlay=disable-hdmi0` | disabled | Power savings (headless) |
@@ -597,7 +595,7 @@ CM5/
 ├── usbboot/                  <- rpiboot tool (built from source)
 │   ├── rpiboot              <- Binary for USB boot mode
 │   └── recovery5/           <- EEPROM configuration
-│       ├── boot.conf        <- Boot order settings (BOOT_ORDER=0xf16)
+│       ├── boot.conf        <- Boot order settings (BOOT_ORDER=0xfe6)
 │       └── update-pieeprom.sh <- Builds EEPROM image from boot.conf
 ├── image/                    <- Image build system
 │   ├── build.sh             <- Build wrapper (checks prerequisites first)
@@ -635,7 +633,7 @@ Files referenced by the image build but located elsewhere in the repo:
 ├── .env.example              <- Reference template
 ├── docker-compose.yml        <- Service orchestration
 ├── deploy.sh                 <- For future OTA updates
-├── config/                   <- Mosquitto and Node-RED configuration
+├── config/                   <- Mosquitto configuration
 ├── scripts/                  <- Certificate generation
 ├── local_code/               <- Python scripts, systemd units
 │   ├── .env                  <- Created by first-login wizard (host-facing MQTT URL)
@@ -643,6 +641,5 @@ Files referenced by the image build but located elsewhere in the repo:
 ├── images/                   <- Docker tarballs (deleted after first-boot loading)
 └── data/
     ├── keys/                 <- TLS certificates (generated by firstboot)
-    ├── tileserver/map.mbtiles <- Map tiles (baked into image)
-    └── node-red/             <- Node-RED runtime data
+    └── tileserver/map.mbtiles <- Map tiles (baked into image)
 ```

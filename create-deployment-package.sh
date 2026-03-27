@@ -103,12 +103,6 @@ cp docker-compose.yml "$STAGING_DIR/"
 echo "  - Copying configuration files..."
 cp -r config "$STAGING_DIR/"
 
-# Inject app version into starter flow so Node-RED auto-updates on deploy
-if [ -n "$VERSION" ]; then
-    sed -i '/Version:/s/__APP_VERSION__/'"$VERSION"'/' "$STAGING_DIR/config/node-red/starter-flow.json"
-    echo "  - Version $VERSION injected into starter flow"
-fi
-
 # Python local code
 echo "  - Copying Python local code..."
 cp -r local_code "$STAGING_DIR/"
@@ -166,9 +160,9 @@ echo "Package: $ZIP_NAME"
 ls -lh "$ZIP_NAME"
 echo ""
 echo "Package contents:"
-echo "  images/*.tar           (7 pre-built Docker images including MongoDB)"
+echo "  images/*.tar           (5 pre-built Docker images including MongoDB)"
 echo "  docker-compose.yml     (service orchestration)"
-echo "  config/                (mosquitto & node-red configs)"
+echo "  config/                (mosquitto config)"
 echo "  local_code/            (Python CAN-to-MQTT bridge & OTA helpers)"
 if [ -d "firmware" ] && [ "$(find firmware -name '*.bin' 2>/dev/null)" ]; then
     echo "  firmware/wired/        (MCU firmware binaries)"

@@ -28,7 +28,3 @@ services:
   mongodb:
     ports:
       - "27017:27017"
-
-  node-red:
-    ports:
-      - "1880:1880"

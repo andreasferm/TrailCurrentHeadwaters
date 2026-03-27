@@ -86,7 +86,6 @@ if [ ! -f .env ]; then
         echo "    # Set MQTT_PASSWORD, ADMIN_PASSWORD, etc."
         echo "    # Generate secrets:"
         echo "    #   ENCRYPTION_KEY: openssl rand -hex 32"
-        echo "    #   NODE_RED_CREDENTIAL_SECRET: openssl rand -hex 64"
         echo ""
         exit 1
     else

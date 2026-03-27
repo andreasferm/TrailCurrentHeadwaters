@@ -69,7 +69,7 @@ mmdebstrap:
       dtparam=act_led_activelow=off
       gpu_mem=16
 
-      # ── Underclock to 600 MHz (ample for Node-RED/Mosquitto/MongoDB workload) ──
+      # ── Underclock to 600 MHz (ample for Mosquitto/MongoDB/backend workload) ──
       arm_freq=600
 
       # ── Active cooler: lower fan threshold for enclosed operation ──
@@ -137,10 +137,9 @@ mmdebstrap:
       # .env.example (template for reference)
       install -m 644 -o 1000 -g 1000 "$REPO_ROOT/.env.example" "$TC_HOME/.env.example"
 
-      # config/ (mosquitto, node-red)
+      # config/ (mosquitto)
       mkdir -p "$TC_HOME/config"
       cp -r "$REPO_ROOT/config/mosquitto" "$TC_HOME/config/"
-      cp -r "$REPO_ROOT/config/node-red" "$TC_HOME/config/"
       chown -R 1000:1000 "$TC_HOME/config"
 
       # scripts/ (cert generation)
@@ -150,6 +149,7 @@ mmdebstrap:
 
       # local_code/ (Python scripts, systemd units, requirements)
       mkdir -p "$TC_HOME/local_code"
+      chown 1000:1000 "$TC_HOME/local_code"
       for f in "$REPO_ROOT"/local_code/*.py "$REPO_ROOT"/local_code/*.service "$REPO_ROOT"/local_code/requirements.txt; do
         [ -f "$f" ] && install -m 644 -o 1000 -g 1000 "$f" "$TC_HOME/local_code/"
       done
@@ -178,8 +178,8 @@ mmdebstrap:
         echo "The tileserver will not start without this file."
       fi
 
-      # data/node-red/ and data/keys/ directories (populated by firstboot)
-      mkdir -p "$TC_HOME/data/keys" "$TC_HOME/data/node-red"
+      # data/keys/ directory (populated by firstboot)
+      mkdir -p "$TC_HOME/data/keys"
       chown -R 1000:1000 "$TC_HOME/data"
 
     # ── First-login setup script + bash_profile hook ───────────────────

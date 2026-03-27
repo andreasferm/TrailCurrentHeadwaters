@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { encrypt, decrypt } = require('../utils/crypto.js');
-const { injectWithRetry, removeWithRetry } = require('../services/nodered-cloud-workflow.js');
+const cloudBridge = require('../services/cloud-bridge');
 const { syncPdmChannelsToLights } = require('../services/pdm-channel-sync.js');
 const { syncSwitchbackChannelsToLights } = require('../services/switchback-channel-sync.js');
 const { buildConfigSnapshot } = require('../services/config-snapshot.js');
@@ -23,6 +23,7 @@ module.exports = (db) => {
                     cloud_mqtt_username: '',
                     cloud_mqtt_password: '',
                     cloud_api_key: '',
+                    cloud_rate_limit: 30,
                     sms_enabled: false,
                     sms_phone_number: '',
                     sms_router_ip: '',
@@ -102,7 +103,7 @@ module.exports = (db) => {
     // PUT /api/system-config
     router.put('/', async (req, res) => {
         try {
-            const { wizard_completed, cloud_enabled, cloud_url, cloud_mqtt_username, cloud_mqtt_password, cloud_api_key, mcu_modules, wifi_ssid, wifi_password } = req.body;
+            const { wizard_completed, cloud_enabled, cloud_url, cloud_mqtt_username, cloud_mqtt_password, cloud_api_key, cloud_rate_limit, mcu_modules, wifi_ssid, wifi_password } = req.body;
 
             const updates = {};
 
@@ -174,6 +175,15 @@ module.exports = (db) => {
                     updates.cloud_api_key_encrypted = '';
                     updates.cloud_api_key_iv = '';
                 }
+            }
+
+            if (cloud_rate_limit !== undefined) {
+                const rate = parseInt(cloud_rate_limit);
+                if (isNaN(rate) || rate < 1 || rate > 100) {
+                    return res.status(400).json({ error: 'cloud_rate_limit must be an integer between 1 and 100' });
+                }
+                updates.cloud_rate_limit = rate;
+                cloudBridge.updateRateLimit(rate);
             }
 
             if (req.body.sms_enabled !== undefined) {
@@ -341,10 +351,9 @@ module.exports = (db) => {
                     console.error('[System Config] Error publishing cloud config notification:', error);
                 }
 
-                // Inject or remove the Node-RED cloud workflow (fire-and-forget)
+                // Connect or disconnect the cloud bridge
                 if (cloud_enabled === false) {
-                    removeWithRetry().catch(err =>
-                        console.error('[System Config] Cloud workflow removal failed:', err.message));
+                    cloudBridge.disconnect();
                 } else {
                     // Re-read saved config to get the full set of cloud fields
                     const saved = await systemConfig.findOne({ _id: 'main' });
@@ -353,8 +362,15 @@ module.exports = (db) => {
                         if (saved.cloud_mqtt_password_encrypted && saved.cloud_mqtt_password_iv) {
                             try { mqttPass = decrypt(saved.cloud_mqtt_password_encrypted, saved.cloud_mqtt_password_iv); } catch {}
                         }
-                        injectWithRetry(saved.cloud_url, saved.cloud_mqtt_username, mqttPass).catch(err =>
-                            console.error('[System Config] Cloud workflow injection failed:', err.message));
+                        try {
+                            const url = new URL(saved.cloud_url);
+                            cloudBridge.connect(mqttService, url.hostname, saved.cloud_mqtt_username, mqttPass);
+                            if (saved.cloud_rate_limit) {
+                                cloudBridge.updateRateLimit(saved.cloud_rate_limit);
+                            }
+                        } catch (err) {
+                            console.error('[System Config] Cloud bridge connection failed:', err.message);
+                        }
                     }
                 }
             }
@@ -471,6 +487,7 @@ module.exports = (db) => {
                 cloud_mqtt_password_iv: '',
                 cloud_api_key_encrypted: '',
                 cloud_api_key_iv: '',
+                cloud_rate_limit: 30,
                 sms_enabled: false,
                 sms_phone_number: '',
                 sms_router_ip: '',
@@ -489,9 +506,8 @@ module.exports = (db) => {
                 { upsert: true }
             );
 
-            // Remove cloud workflow from Node-RED on reset (fire-and-forget)
-            removeWithRetry().catch(err =>
-                console.error('[System Config] Cloud workflow removal on reset failed:', err.message));
+            // Disconnect cloud bridge on reset
+            cloudBridge.disconnect();
 
             res.json({
                 success: true,

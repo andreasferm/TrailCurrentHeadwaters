@@ -97,15 +97,12 @@ async function startServer() {
         // Initialize MQTT service
         mqttService.connect(db, broadcast);
 
-        // Inject starter flow into Node-RED if empty (must complete before cloud workflow)
-        const { injectStarterFlowIfEmpty, injectWithRetry } = require('./services/nodered-cloud-workflow');
-        try {
-            await injectStarterFlowIfEmpty();
-        } catch (err) {
-            console.error('[Startup] Starter flow injection failed:', err.message);
-        }
+        // Initialize CAN bridge (subscribes to can/inbound, routes to local/* topics)
+        const canBridge = require('./services/can-bridge');
+        canBridge.init(mqttService);
 
-        // Re-inject cloud workflow if cloud is enabled (picks up template changes on deploy)
+        // Connect cloud bridge if cloud is enabled
+        const cloudBridge = require('./services/cloud-bridge');
         const sysConfig = await db.collection('system_config').findOne({ _id: 'main' });
         if (sysConfig && sysConfig.cloud_enabled) {
             const { decrypt } = require('./utils/crypto');
@@ -113,8 +110,15 @@ async function startServer() {
             if (sysConfig.cloud_mqtt_password_encrypted && sysConfig.cloud_mqtt_password_iv) {
                 try { mqttPass = decrypt(sysConfig.cloud_mqtt_password_encrypted, sysConfig.cloud_mqtt_password_iv); } catch {}
             }
-            injectWithRetry(sysConfig.cloud_url, sysConfig.cloud_mqtt_username, mqttPass).catch(err =>
-                console.error('[Startup] Cloud workflow re-injection failed:', err.message));
+            try {
+                const url = new URL(sysConfig.cloud_url);
+                cloudBridge.connect(mqttService, url.hostname, sysConfig.cloud_mqtt_username, mqttPass);
+                if (sysConfig.cloud_rate_limit) {
+                    cloudBridge.updateRateLimit(sysConfig.cloud_rate_limit);
+                }
+            } catch (err) {
+                console.error('[Startup] Cloud bridge connection failed:', err.message);
+            }
         }
 
         // Sync PDM channel configs to lights collection (fire-and-forget)
@@ -154,6 +158,9 @@ async function startServer() {
 // Graceful shutdown
 async function shutdown(signal) {
     console.log(`${signal} received, shutting down gracefully`);
+    try {
+        require('./services/cloud-bridge').disconnect();
+    } catch {}
     server.close(async () => {
         await closeDb();
         process.exit(0);

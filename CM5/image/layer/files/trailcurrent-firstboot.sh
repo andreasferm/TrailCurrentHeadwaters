@@ -49,7 +49,6 @@ fi
 # Create application data directories
 sudo -u "$TC_USER" mkdir -p "$TC_HOME/data/keys"
 sudo -u "$TC_USER" mkdir -p "$TC_HOME/data/tileserver"
-sudo -u "$TC_USER" mkdir -p "$TC_HOME/data/node-red"
 sudo -u "$TC_USER" mkdir -p "$TC_HOME/local_code"
 
 # -------------------------------------------

@@ -12,7 +12,6 @@ Dockerized edge gateway with MQTT broker, tile server, and local dashboards. Par
 | Build a CM5 image or deployment package | [Building for CM5 Devices](#building-for-cm5-devices) below |
 | Flash and set up a new CM5 device | [CM5/SETUP.md](CM5/SETUP.md) |
 | Update an existing device | [PI_DEPLOYMENT.md](PI_DEPLOYMENT.md) |
-| Set up Node-RED flows | [Node-RED Setup](#node-red-setup) below |
 | Understand cloud OTA updates | [OTA_DEPLOYMENT_IMPLEMENTATION.md](OTA_DEPLOYMENT_IMPLEMENTATION.md#cloud-to-pi-ota-deployment-deployment-watcher) |
 
 ## Prerequisites
@@ -42,19 +41,13 @@ cp .env.example .env
 ```bash
 # Generate ENCRYPTION_KEY (64 character hex string)
 openssl rand -hex 32
-
-# Generate NODE_RED_CREDENTIAL_SECRET (128 character hex string)
-openssl rand -hex 64
 ```
 
-Copy these values into the corresponding fields in `.env`.
+Copy the value into `ENCRYPTION_KEY` in `.env`.
 
 ### Step 3: Edit `.env` and set your values
 
-- `NODE_RED_ADMIN_USER` - Your Node-RED admin username
-- `NODE_RED_ADMIN_PASSWORD` - Your desired admin password (plain text - auto-hashed at startup)
 - `ENCRYPTION_KEY` - Paste the value from step 2
-- `NODE_RED_CREDENTIAL_SECRET` - Paste the value from step 2
 - `ADMIN_PASSWORD` - Strong password for system admin access
 - `MQTT_USERNAME` - Username for MQTT broker
 - `MQTT_PASSWORD` - Password for MQTT broker (plain text - auto-added to broker at startup)
@@ -78,10 +71,11 @@ mkdir -p data/tileserver
 # Place your tiles file at: data/tileserver/map.mbtiles
 ```
 
-To generate tiles from OpenStreetMap data, use the **PbfTileConverter** utility:
-[../../Utilities/PbfTileConverter](../../Utilities/PbfTileConverter)
+**How to get tiles:**
+- **Download from OpenStreetMap:** Use the [PbfTileConverter](https://github.com/onthegomap/planetiler) utility or a service like [Protomaps](https://protomaps.com/) to generate tiles from OSM data (see [DOCS/UpdatingMapTiles.md](DOCS/UpdatingMapTiles.md))
+- **Copy from a team member:** Copy `map.mbtiles` from an existing machine
 
-Or copy `map.mbtiles` from an existing team member's machine.
+A single US state (~200 MB - 2 GB) works fine for development. Full US coverage is ~10-25 GB.
 
 ### Step 6: Build and start in development mode
 
@@ -93,11 +87,9 @@ The `--build` flag ensures all images are built from local Dockerfiles for your 
 - Hot-reload for frontend and backend code changes
 - Node.js debug port (9229) for VSCode debugger attachment
 - MongoDB accessible on localhost:27017
-- Node-RED accessible on localhost:1880
 - Tileserver styles hot-reload
 
 Containers will automatically:
-- Generate the bcrypt hash for Node-RED from your plain password
 - Create the mosquitto password file from your credentials
 - Initialize all services with consistent credentials
 - Mount the SSL certificates for HTTPS/MQTTS communication
@@ -108,7 +100,7 @@ Containers will automatically:
 After startup, verify all services are healthy:
 
 ```bash
-# All 7 containers should be running
+# All 5 containers should be running
 docker compose ps
 
 # Frontend loads
@@ -151,7 +143,7 @@ an interactive wizard on first SSH login.
 | File | How to get it |
 |------|---------------|
 | `images/*.tar` | Run `./build-and-save-images.sh` (builds ARM64 Docker images) |
-| `data/tileserver/map.mbtiles` | Copy from a team member or generate from OSM data (see [DOCS/UpdatingMapTiles.md](DOCS/UpdatingMapTiles.md)) |
+| `data/tileserver/map.mbtiles` | Download from OSM data or copy from a team member (see [DOCS/UpdatingMapTiles.md](DOCS/UpdatingMapTiles.md)) |
 
 **Build the image:**
 ```bash
@@ -179,7 +171,7 @@ deployment zip:
 ```
 
 This will:
-1. Build all 6 service images for `linux/arm64` (plus pull `mongo:7`)
+1. Build all 4 service images for `linux/arm64` (plus pull `mongo:7`)
 2. Save images as `.tar` files in `images/`
 3. Fetch MCU firmware from GitHub releases (if available)
 4. Package everything into `trailcurrent-deployment-1.0.0.zip`
@@ -200,23 +192,57 @@ See [PI_DEPLOYMENT.md](PI_DEPLOYMENT.md) for detailed deployment instructions.
 
 ---
 
+## Architecture
+
+### Services
+
+The application runs 5 Docker containers:
+
+| Service | Purpose |
+|---------|---------|
+| **frontend** | nginx serving the MapLibre GL PWA (HTTPS on port 443) |
+| **backend** | Node.js Express API with MQTT, CAN bridge, and cloud bridge |
+| **mosquitto** | Eclipse Mosquitto MQTT broker (TLS on port 8883) |
+| **mongodb** | MongoDB 7 document database |
+| **tileserver** | Custom vector tile server with styles, fonts, and sprites |
+
+### CAN Bus Bridge
+
+The backend includes a built-in CAN bridge service (`src/services/can-bridge.js`) that:
+- Subscribes to `can/inbound` MQTT messages from the host-side Python CAN-to-MQTT bridge
+- Routes by CAN identifier and parses bit-array data into structured JSON
+- Publishes to `local/*` MQTT topics (lights, relays, energy, GPS, air quality, leveling)
+- Sends outbound CAN commands for light toggles, brightness, and relay control
+
+### Cloud Bridge
+
+When cloud synchronization is enabled in Settings, the backend connects a second MQTT client to the cloud broker (`src/services/cloud-bridge.js`):
+- **Cloud to Local (Commands):** `rv/lights/N/command` triggers CAN toggle, `rv/thermostat/command` passes through to local
+- **Local to Cloud (Status):** Light status, air quality, GPS, energy, thermostat, leveling — each rate-limited (configurable, default 30 msgs/sec)
+- **Config sync:** System config snapshot published as retained message on cloud connect
+
+### Host-Side Services
+
+Python scripts running as systemd services on the host (outside Docker):
+- `can-to-mqtt.py` — Bridges the physical CAN bus (`can0`) to MQTT topics (`can/inbound`, `can/outbound`)
+- `discovery-mdns.py` — Discovers MCU modules on the local network via mDNS
+- `deployment-watcher.py` — Monitors for OTA deployment updates from the cloud
+
+---
+
 ## Project Structure
 
 ```
 containers/          Dockerfiles for each service
   frontend/          nginx + MapLibre GL web UI
-  backend/           Node.js Express API
+  backend/           Node.js Express API + CAN bridge + cloud bridge
   mosquitto/         Eclipse Mosquitto MQTT broker
-  node-red/          Node-RED flow engine
-  noderedproxy/      nginx HTTPS proxy for Node-RED
   tileserver/        Custom tile server (styles, fonts, sprites)
 config/              Version-controlled service configurations
   mosquitto/         mosquitto.conf
-  node-red/          settings.js, starter-flow.json, cloud-workflow.json
 data/                Runtime data (gitignored)
   keys/              TLS certificates
   tileserver/        map.mbtiles (~25 GB, not in repo)
-  node-red/          Node-RED flows
 images/              ARM64 Docker image tarballs (gitignored, built by build-and-save-images.sh)
 local_code/          Python host services (CAN-to-MQTT bridge, deployment watcher, OTA helpers)
 scripts/             Utility scripts (cert generation)
@@ -224,7 +250,7 @@ CM5/                 CM5 image build system, flashing tools, setup guide
 ```
 
 **Docker Compose files:**
-- `docker-compose.yml` — Production orchestration (7 services)
+- `docker-compose.yml` — Production orchestration (5 services)
 - `docker-compose.dev.yml` — Development overrides (hot-reload, debug ports)
 
 ---
@@ -267,7 +293,6 @@ For local development with `localhost` or `127.0.0.1`:
 **Access locally:**
 ```
 https://localhost           - Frontend (HTTPS)
-https://localhost:8443      - Node-RED (HTTPS)
 ```
 
 Accept the self-signed certificate warning in your browser (one-time).
@@ -334,7 +359,6 @@ The `data/` directory contains all persistent application data:
 
 - **SSL certificates** (`data/keys/`) — Generated once, valid for 10 years
 - **Map tiles** (`data/tileserver/map.mbtiles`) — Set up once, rarely updated
-- **Node-RED flows** (`data/node-red/`) — User-created flows and settings
 - **MongoDB** — Named volume `mongodb-data`, persists across rebuilds
 
 **Never delete `data/` during updates** unless performing a complete reset. All data persists across container rebuilds.
@@ -343,56 +367,8 @@ The `data/` directory contains all persistent application data:
 ```bash
 git pull
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
-# Certificates, .env, map tiles, and Node-RED flows are preserved
+# Certificates, .env, and map tiles are preserved
 ```
-
----
-
-## Node-RED Setup
-
-Node-RED bridges CAN bus messages to local MQTT topics that the PWA consumes. Flow templates are stored in `config/node-red/`.
-
-### What the Starter Flow Does
-
-- **Inbound:** Subscribes to `can/inbound`, routes by CAN identifier, and publishes parsed data to `local/*` topics:
-  - Light status (8 channels) → `local/lights/{1-8}/status`
-  - Energy (battery voltage, SOC, solar watts, charge status, power consumption, time remaining) → `local/energy/status`
-  - Temperature & humidity → `local/airquality/temphumid`
-  - GPS coordinates, altitude, details, time → `local/gps/*`
-- **Outbound:** Subscribes to `local/lights/{1-8}/command` and `local/lights/{1-8}/brightness` (from PWA light controls) and sends CAN messages to `can/outbound`
-- **Test controls:** Manual inject nodes for toggling lights, setting brightness, and all-on/all-off
-
-### Automatic Loading (First Startup)
-
-On first startup, the backend automatically detects that Node-RED has no flows and injects the starter flow via the Node-RED Admin API. Existing installations with flows already present are not affected.
-
-### Cloud Workflow (Auto-Injected)
-
-When cloud synchronization is enabled in Settings, the backend automatically injects a "Cloud Workflow" tab into Node-RED that bridges messages between the local and cloud MQTT brokers:
-
-- **Cloud → Local (Commands):** `rv/lights/N/command` → CAN toggle, `rv/thermostat/command` → local passthrough
-- **Local → Cloud (Status):** Light status, air quality, GPS, energy, thermostat — each rate-limited to 30 msg/sec
-
-The cloud workflow is automatically removed when cloud is disabled or the system config is reset. The template is at `config/node-red/cloud-workflow.json`.
-
-### Manual Import (Existing Installations)
-
-1. Open Node-RED at `https://<hostname>:8443`
-2. Click the hamburger menu (top right) → **Import**
-3. Select **Upload** and choose `config/node-red/starter-flow.json`
-4. Click **Import**
-
-### Configure MQTT Credentials
-
-After importing, Node-RED needs MQTT credentials to connect to Mosquitto:
-
-1. Double-click any MQTT node (e.g. "CAN Inbound")
-2. Click the pencil icon next to **Local MQTT Broker**
-3. Go to the **Security** tab
-4. Enter your `MQTT_USERNAME` and `MQTT_PASSWORD` (same values from `.env`)
-5. Click **Update**, then click the red **Deploy** button
-
-The broker is pre-configured to connect to `mosquitto:8883` via Docker internal DNS with TLS.
 
 ---
 
@@ -480,7 +456,7 @@ The debugging setup is configured in `.vscode/launch.json`:
 1. **Breakpoint in startServer()** in `src/index.js` to debug initialization
 2. **Route breakpoints** in route handlers (e.g., `src/routes/thermostat.js`)
 3. **MQTT debugging** via breakpoints in `src/mqtt.js`
-4. **Database debugging** via breakpoints in `src/db/init.js`
+4. **CAN bridge debugging** via breakpoints in `src/services/can-bridge.js`
 5. **Conditional breakpoints**: Right-click a breakpoint to set conditions
 6. **Logpoints**: Right-click line number to log values without pausing
 

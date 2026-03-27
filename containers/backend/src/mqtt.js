@@ -348,31 +348,27 @@ class MqttService {
         }
     }
 
-    // Publish relay toggle command — routes to CAN ID 0x25 via Node-RED
+    // Publish relay toggle command — sends CAN ID 0x025 directly
     publishRelayToggle(channel) {
         if (!this.connected) {
             console.warn('MQTT not connected, cannot publish relay toggle');
             return false;
         }
 
-        const topic = `${MQTT_ROOT}/${MQTT_RELAYS}/${channel + 1}/${MSG_COMMAND}`;
-        const payload = { action: 'toggle' };
-        console.log(`Publishing relay toggle to ${topic}:`, payload);
-        this.client.publish(topic, JSON.stringify(payload), { qos: 1 });
+        const canBridge = require('./services/can-bridge');
+        canBridge.sendRelayToggle(this, channel);
         return true;
     }
 
-    // Publish relay all on/off command — routes to CAN ID 0x25 [0xFF, state] via Node-RED
+    // Publish relay all on/off command — sends CAN ID 0x025 [0xFF, state] directly
     publishRelayAllCommand(state) {
         if (!this.connected) {
             console.warn('MQTT not connected, cannot publish relay all command');
             return false;
         }
 
-        const topic = `${MQTT_ROOT}/${MQTT_RELAYS}/all/${MSG_COMMAND}`;
-        const payload = { state };
-        console.log(`Publishing relay all command to ${topic}:`, payload);
-        this.client.publish(topic, JSON.stringify(payload), { qos: 1 });
+        const canBridge = require('./services/can-bridge');
+        canBridge.sendRelayAll(this, state);
         return true;
     }
 
@@ -465,7 +461,7 @@ class MqttService {
         }
     }
 
-    // Handle Plateau tilt data (CAN ID 0x30 decoded by Node-RED)
+    // Handle Plateau tilt data (CAN ID 0x30 decoded by CAN bridge)
     // Payload: { front_back, side_to_side, front_back_diff_mm, left_right_diff_mm }
     handleLevelTilt(payload) {
         if (this.broadcast) {
@@ -473,7 +469,7 @@ class MqttService {
         }
     }
 
-    // Handle Plateau status data (CAN ID 0x32 decoded by Node-RED)
+    // Handle Plateau status data (CAN ID 0x32 decoded by CAN bridge)
     // Payload: { imu_connected, fully_calibrated, cal_sys, cal_gyro, cal_accel, cal_mag, mounting }
     handleLevelStatus(payload) {
         if (this.broadcast) {
@@ -503,26 +499,18 @@ class MqttService {
     }    
 
 
-    // Publish light command — routes to separate MQTT topics for toggle vs brightness
-    // so Node-RED can send them to different CAN bus messages
+    // Publish light command — sends CAN messages directly (toggle 0x018, brightness 0x015)
     publishLightCommand(lightId, state, brightness = null) {
         if (!this.connected) {
             console.warn('MQTT not connected, cannot publish light command');
             return false;
         }
 
+        const canBridge = require('./services/can-bridge');
         if (brightness !== null) {
-            // Brightness set: separate topic → CAN ID 0x015
-            const topic = `${MQTT_ROOT}/${MQTT_LIGHTS}/${lightId}/${MSG_BRIGHTNESS}`;
-            const payload = { brightness };
-            console.log(`Publishing light brightness to ${topic}:`, payload);
-            this.client.publish(topic, JSON.stringify(payload), { qos: 1 });
+            canBridge.sendLightBrightness(this, lightId - 1, brightness);
         } else {
-            // Toggle: existing topic → CAN ID 0x018
-            const topic = `${MQTT_ROOT}/${MQTT_LIGHTS}/${lightId}/${MSG_COMMAND}`;
-            const payload = { state };
-            console.log(`Publishing light command to ${topic}:`, payload);
-            this.client.publish(topic, JSON.stringify(payload), { qos: 1 });
+            canBridge.sendLightToggle(this, lightId - 1);
         }
         return true;
     }

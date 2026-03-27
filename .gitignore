@@ -25,7 +25,6 @@ pyenv
 __pycache__/
 **/__pycache__/
 Vagrantfile
-containers/node-red/node-red-data
 **/*.venv
 data/
 **/*.env

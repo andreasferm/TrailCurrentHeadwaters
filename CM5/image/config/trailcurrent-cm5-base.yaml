@@ -14,7 +14,7 @@
 #
 # Supports both CM5 (with eMMC, ignored) and CM5 Lite (no eMMC).
 #
-# Does NOT include the application stack (containers, Node-RED flows, etc.)
+# Does NOT include the application stack (containers, services, etc.)
 # Those are deployed separately via deploy.sh.
 
 include:

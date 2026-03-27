@@ -59,8 +59,6 @@ SERVICES=(
     "containers/frontend|trailcurrent-in-vehicle-frontend"
     "containers/backend|trailcurrent-in-vehicle-backend"
     "containers/mosquitto|trailcurrent-in-vehicle-mosquitto"
-    "containers/node-red|trailcurrent-in-vehicle-node-red"
-    "containers/noderedproxy|trailcurrent-in-vehicle-noderedproxy"
     "containers/tileserver|trailcurrent/trailcurrent-tile-server"
 )
 

@@ -1,20 +1,6 @@
 name: trailcurrent
 
 services:
-  noderedproxy:
-    image: trailcurrent-in-vehicle-noderedproxy:latest
-    build:
-      context: ./containers/noderedproxy
-      dockerfile: Dockerfile
-    volumes:
-      - ./data/keys/server.crt:/etc/nginx/certs/server.crt:ro
-      - ./data/keys/server.key:/etc/nginx/certs/server.key:ro
-    ports:
-      - "8443:8443"
-    restart: unless-stopped # Import for reboots
-    depends_on:
-      - mosquitto
-      - node-red
   frontend:
     image: trailcurrent-in-vehicle-frontend:latest
     build:
@@ -43,19 +29,14 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - TLS_CERT_HOSTNAME=${TLS_CERT_HOSTNAME}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - NODE_RED_ADMIN_USER=${NODE_RED_ADMIN_USER}
-      - NODE_RED_ADMIN_PASSWORD=${NODE_RED_ADMIN_PASSWORD}
     volumes:
       - ./data/keys/ca.pem:/app/certs/ca.pem:ro
-      - ./config/node-red/cloud-workflow.json:/app/config/cloud-workflow.json:ro
-      - ./config/node-red/starter-flow.json:/app/config/starter-flow.json:ro
       - ./data/firmware:/app/firmware
     restart: unless-stopped # Import for reboots
     depends_on:
       - mosquitto
       - mongodb
       - tileserver
-      - node-red
   mongodb:
     image: mongo:7
     restart: unless-stopped
@@ -78,25 +59,6 @@ services:
       - "8883:8883"
     hostname: mosquitto
     restart: always
-  node-red:
-    image: trailcurrent-in-vehicle-node-red:latest
-    build:
-      context: ./containers/node-red
-      dockerfile: Dockerfile
-    volumes:
-      - ./data/node-red:/data
-      - ./config/node-red/settings.js:/data/settings.js
-      - ./data/keys/ca.pem:/data/ca.pem:ro
-    depends_on:
-      - mosquitto
-    environment:
-      - NODE_RED_ADMIN_USER=${NODE_RED_ADMIN_USER}
-      - NODE_RED_ADMIN_PASSWORD=${NODE_RED_ADMIN_PASSWORD}
-      - CREDENTIAL_SECRET=${NODE_RED_CREDENTIAL_SECRET}
-      - NODE_RED_MQTT_BROKER_URL=mqtts://mosquitto:8883
-      - MQTT_USERNAME=${MQTT_USERNAME}
-      - MQTT_PASSWORD=${MQTT_PASSWORD}
-    restart: unless-stopped
   tileserver:
     image: trailcurrent/trailcurrent-tile-server:latest
     build:
@@ -115,7 +77,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  node-red-data:
   mongodb-data:
   mosquitto-data:
   mosquitto-log:
