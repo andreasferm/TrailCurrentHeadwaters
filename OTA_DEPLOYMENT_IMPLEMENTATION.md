@@ -44,10 +44,10 @@ Three critical issues were discovered and resolved during testing to make OTA de
 **Result**: Host scripts successfully connect to MQTT broker using external hostname (e.g., `trailcurrent01.local`)
 
 ### 3. Dynamic IP Detection for OTA Upload Server
-**Issue**: ESP32 couldn't connect back to upload server (espota.py) to download firmware.
+**Issue**: ESP32 couldn't connect back to the upload server to download firmware.
 
 **Root Cause**:
-- espota.py was passed hostname (`trailcurrent01.local`) instead of IP address via `-I` parameter
+- Hostname (`trailcurrent01.local`) was used instead of IP address
 - ESP32 couldn't resolve or reach the hostname from WiFi network
 - Pi's network was on different segment than ESP32, requiring actual IP address
 
@@ -55,9 +55,9 @@ Three critical issues were discovered and resolved during testing to make OTA de
 - Added Python-based IP detection in `deploy.sh`
 - Determines Pi's outbound IP automatically (socket-based detection)
 - Falls back to hostname resolution if direct IP detection fails
-- Passes actual IP address to espota.py via `-I` parameter
+- Firmware is uploaded via HTTP POST to the device's `/ota` endpoint
 
-**Result**: ESP32 successfully connects back to Pi's IP address and downloads firmware over WiFi
+**Result**: ESP32 successfully receives firmware over WiFi via HTTP
 
 ## Completed Implementation
 
@@ -103,16 +103,15 @@ $VENV_PATH/bin/pip install -q -r local_code/requirements.txt
 for each enabled module with available firmware:
   1. Trigger OTA mode via MQTT message
   2. Wait 8-10 seconds for device to enter OTA
-  3. Locate espota.py
-  4. Push firmware over WiFi using espota.py
-  5. Device reboots with new firmware
+  3. Push firmware via HTTP POST to device's /ota endpoint
+  4. Device reboots with new firmware
 ```
 
 #### deploy_firmware() Function
 - Handles individual device OTA updates
 - Publishes CAN message via MQTT
 - Waits for device readiness
-- Executes espota.py with correct parameters
+- Uploads firmware via HTTP POST to device's `/ota` endpoint
 - Reports success/failure per device
 
 ## Data Flow
@@ -135,15 +134,13 @@ For each enabled module:
 ```
 deploy.sh (determines Pi's IP dynamically)
   |
-espota.py -i esp32-hostname -I <Pi_IP> -f firmware.bin
-  | [Sends invitation to esp32-hostname:3232]
+HTTP POST firmware.bin to http://<esp32-hostname>.local/ota
+  | [Content-Type: application/octet-stream]
   WiFi Network
-    | [Device responds, connects back to Pi_IP on random port 10000-60000]
-    Device (OTA listener on port 3232 receives invitation)
-      | [Device connects to Pi_IP and downloads firmware]
-      Firmware upload progress
-        |
-        Device reboots with new firmware
+    | [Device receives firmware binary]
+    Device (HTTP server on /ota endpoint)
+      | [Writes to OTA partition, verifies]
+      Device reboots with new firmware
 ```
 
 ## Configuration
@@ -208,15 +205,13 @@ Devices stored in MongoDB (`system_config.mcu_modules`):
 1. **MongoDB** - Running and accessible at localhost:27017
 2. **MQTT Broker** - Running (mosquitto in Docker)
 3. **CAN-to-MQTT Bridge** - cantomqtt.service running
-4. **espota.py** - Included in deployment package at `local_code/espota.py`
-5. **jq** - JSON command-line processor (for parsing module list)
-6. **mDNS** - Devices accessible via hostname (e.g., esp32-XXXXXX)
-7. **Python 3** - For helper scripts and espota.py
-8. **Python packages** - pymongo, paho-mqtt, python-dotenv (installed by deploy.sh)
-9. **Network Connectivity** - CRITICAL
-   - ESP32 must be able to reach Pi's IP address on ports 3232 (initial invitation) and 10000-60000 (firmware download)
+4. **jq** - JSON command-line processor (for parsing module list)
+5. **mDNS** - Devices accessible via hostname (e.g., esp32-XXXXXX)
+6. **Python 3** - For helper scripts
+7. **Python packages** - pymongo, paho-mqtt, python-dotenv (installed by deploy.sh)
+8. **Network Connectivity** - CRITICAL
+   - Pi must be able to reach ESP32's HTTP server (port 80) for firmware upload
    - If Pi is on Ethernet and ESP32 is on WiFi: Ensure router allows communication between networks
-   - Firewall must allow incoming connections on upload port range (10000-60000)
    - Devices should be on same network segment or subnets with routing enabled between them
 
 ## Deployment Process
@@ -254,7 +249,6 @@ Step 7: Deploying MCU firmware (if present)...
 
 - **No firmware directory**: Skips OTA deployment gracefully
 - **No enabled modules**: Logs and continues
-- **espota.py not found**: Reports error, continues to next device
 - **OTA trigger fails**: Logs error, continues to next device
 - **Firmware upload fails**: Logs error, continues to next device
 - **Missing jq**: Reports error, suggests installation
@@ -280,35 +274,27 @@ Step 7: Deploying MCU firmware (if present)...
    - Must be exactly `esp32-XXXXXX` (where X is hexadecimal: 0-9, A-F)
    - Example: `esp32-8F56D8`, `esp32-E91EF8`
 
-### Firmware Upload Fails ("No response from device")
+### Firmware Upload Fails
 
-**Symptom**: OTA trigger sent successfully, device enters OTA mode and connects to WiFi, but espota.py times out waiting for response
+**Symptom**: OTA trigger sent successfully, device enters OTA mode and connects to WiFi, but HTTP POST to `/ota` endpoint fails or times out
 
 **This indicates network connectivity issues between Pi and ESP32**:
 
 1. **Check network connectivity**:
    ```bash
    # After device enters OTA mode:
-   ping esp32-XXXXXX  # Should get response
+   ping esp32-XXXXXX.local  # Should get response
 
-   # Try direct port connection
-   timeout 3 bash -c 'cat < /dev/tcp/esp32-XXXXXX/3232' && echo "Port 3232 reachable" || echo "Port 3232 unreachable"
+   # Try reaching the device's HTTP server
+   curl -s -o /dev/null -w "%{http_code}" http://esp32-XXXXXX.local/
    ```
 
-2. **If ports are unreachable**:
+2. **If device is unreachable**:
    - Pi and ESP32 may be on different network segments
    - Router may have AP isolation enabled (prevents WiFi clients from reaching wired devices)
-   - Firewall may be blocking connections
-   - Ensure upload port range (10000-60000) is open for incoming connections
+   - mDNS may not be resolving — check avahi-daemon is running
 
-3. **Verify deploy.sh detected correct IP**:
-   ```bash
-   # Check the deploy.sh output for: "using X.X.X.X as upload server"
-   # Run this to see what IP Pi has:
-   hostname -I
-   ```
-
-4. **Verify device is in OTA mode**:
+3. **Verify device is in OTA mode**:
    - Device should connect to WiFi within 8-10 seconds of trigger
    - Monitor router logs or WiFi client list to confirm connection
 

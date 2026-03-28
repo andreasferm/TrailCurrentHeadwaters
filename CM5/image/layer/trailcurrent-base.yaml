@@ -153,7 +153,7 @@ mmdebstrap:
       for f in "$REPO_ROOT"/local_code/*.py "$REPO_ROOT"/local_code/*.service "$REPO_ROOT"/local_code/requirements.txt; do
         [ -f "$f" ] && install -m 644 -o 1000 -g 1000 "$f" "$TC_HOME/local_code/"
       done
-      chmod 755 "$TC_HOME/local_code/espota.py" 2>/dev/null || true
+
 
       # deploy.sh (for future OTA deployments)
       install -m 755 -o 1000 -g 1000 "$REPO_ROOT/deploy.sh" "$TC_HOME/deploy.sh"
