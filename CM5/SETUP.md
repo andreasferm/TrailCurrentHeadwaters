@@ -269,6 +269,7 @@ Unmount any auto-mounted partitions, then write the image:
 
 **NOTE!!!** This can take a really long time depending on NVME speed. Wait for it to complete and exit back to shell. Otherwise you will corrupt the NVME and have to start over **IMPORTANT**
 ```bash
+# Change to the root of the repository before these commands
 sudo umount /dev/sdX* 2>/dev/null
 #cd to root of project
 sudo dd if=CM5/rpi-image-gen/work/image-trailcurrent-cm5-base/trailcurrent-cm5-base.img \
