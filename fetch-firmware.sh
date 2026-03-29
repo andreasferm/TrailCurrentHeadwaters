@@ -37,20 +37,20 @@ if [[ ! $VERSION == v* ]]; then
     VERSION="v$VERSION"
 fi
 
-# Device mappings: REPO_NAME|DEVICE_TYPE
+# Device mappings: REPO_NAME|DEVICE_TYPE|BINARY_NAME
+# Binary names match the ESP-IDF project() name (or PlatformIO PROGNAME)
 DEVICES=(
-    "TrailCurrentAirQualityModule|air_quality_module"
-    "TrailCurrentCabinetAndDoorSensor|cabinet_and_door_sensor"
-    "TrailCurrentCanEspNowGateway|can_esp_now_gateway"
-    "TrailCurrentEightButtonPanel|eight_button_panel"
-    "TrailCurrentElectricHeaterControl|electric_heater_control"
-    "TrailCurrentGnssModule|gnss_module"
-    "TrailCurrentMpptCanGateway|mppt_can_gateway"
-    "TrailCurrentPowerDistributionModule|power_distribution_module"
-    "TrailCurrentSevenPinTrailerMonitor|seven_pin_trailer_monitor"
-    "TrailCurrentShuntGateway|shunt_gateway"
-    "TrailCurrentVehicleLeveler|vehicle_leveler"
-    "TrailCurrentWallMountedDisplay|wall_mounted_display"
+    "TrailCurrentBorealis|borealis|borealis.bin"
+    "TrailCurrentPicket|picket|picket.bin"
+    "TrailCurrentTapper|tapper|tapper.bin"
+    "TrailCurrentTherma|therma|therma.bin"
+    "TrailCurrentBearing|bearing|bearing.bin"
+    "TrailCurrentSolstice|solstice|solstice.bin"
+    "TrailCurrentTorrent|torrent|torrent.bin"
+    "TrailCurrentAftline|aftline|aftline.bin"
+    "TrailCurrentAmpline|ampline|ampline.bin"
+    "TrailCurrentPlateau|plateau|plateau.bin"
+    "TrailCurrentMilepost|milepost|milepost.bin"
 )
 
 echo "=========================================="
@@ -69,7 +69,7 @@ SKIPPED=0
 FAILED=0
 
 for device_info in "${DEVICES[@]}"; do
-    IFS='|' read -r repo_name device_type <<< "$device_info"
+    IFS='|' read -r repo_name device_type binary_name <<< "$device_info"
 
     device_dir="$FIRMWARE_DIR/$device_type"
     echo -n "Checking $repo_name ($VERSION)... "
@@ -77,11 +77,11 @@ for device_info in "${DEVICES[@]}"; do
     mkdir -p "$device_dir"
     temp_file=$(mktemp)
 
-    download_url="https://github.com/$GITHUB_ORG/$repo_name/releases/download/$VERSION/firmware.bin"
+    download_url="https://github.com/$GITHUB_ORG/$repo_name/releases/download/$VERSION/$binary_name"
 
     if curl -s -L -f -o "$temp_file" "$download_url" 2>/dev/null; then
-        mv "$temp_file" "$device_dir/firmware.bin"
-        file_size=$(du -h "$device_dir/firmware.bin" | cut -f1)
+        mv "$temp_file" "$device_dir/$binary_name"
+        file_size=$(du -h "$device_dir/$binary_name" | cut -f1)
         echo "Downloaded ($file_size)"
         FETCHED=$((FETCHED + 1))
     else

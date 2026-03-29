@@ -384,9 +384,9 @@ if [ "$FIRMWARE_INCLUDED" = "yes" ] && [ -f "local_code/trigger_ota_mqtt.py" ]; 
                 HOSTNAME=$(echo "$module" | jq -r '.hostname')
                 TYPE=$(echo "$module" | jq -r '.type')
                 NAME=$(echo "$module" | jq -r '.name')
-                FIRMWARE_PATH="firmware/wired/${TYPE}/firmware.bin"
+                FIRMWARE_PATH=$(find "firmware/wired/${TYPE}" -name "*.bin" 2>/dev/null | head -1)
 
-                if [ -f "$FIRMWARE_PATH" ]; then
+                if [ -n "$FIRMWARE_PATH" ] && [ -f "$FIRMWARE_PATH" ]; then
                     echo "  Deploying firmware to $NAME ($HOSTNAME)..."
                     deploy_firmware "$HOSTNAME" "$FIRMWARE_PATH" "$NAME" || true
                 else

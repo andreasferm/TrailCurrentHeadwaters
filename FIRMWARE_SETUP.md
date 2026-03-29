@@ -19,10 +19,17 @@ The following MCU modules are configured for automatic firmware fetching:
 
 | Repository | Device Type | Directory |
 |---|---|---|
-| `TrailCurrentEightButtonPanel` | `eight_button_panel` | `firmware/wired/eight_button_panel/` |
-| `TrailCurrentPowerControlModule` | `power_control_module` | `firmware/wired/power_control_module/` |
-| `TrailCurrentGnssModule` | `gnss_module` | `firmware/wired/gnss_module/` |
-| `TrailCurrentAirQualityModule` | `air_quality_module` | `firmware/wired/air_quality_module/` |
+| `TrailCurrentBorealis` | `borealis` | `firmware/wired/borealis/` |
+| `TrailCurrentPicket` | `picket` | `firmware/wired/picket/` |
+| `TrailCurrentTapper` | `tapper` | `firmware/wired/tapper/` |
+| `TrailCurrentTherma` | `therma` | `firmware/wired/therma/` |
+| `TrailCurrentBearing` | `bearing` | `firmware/wired/bearing/` |
+| `TrailCurrentSolstice` | `solstice` | `firmware/wired/solstice/` |
+| `TrailCurrentTorrent` | `torrent` | `firmware/wired/torrent/` |
+| `TrailCurrentAftline` | `aftline` | `firmware/wired/aftline/` |
+| `TrailCurrentAmpline` | `ampline` | `firmware/wired/ampline/` |
+| `TrailCurrentPlateau` | `plateau` | `firmware/wired/plateau/` |
+| `TrailCurrentMilepost` | `milepost` | `firmware/wired/milepost/` |
 
 ### Wireless Modules (Coming Soon - OTA via WebSocket)
 
@@ -52,7 +59,7 @@ These MCU projects are designed to be opened in **VSCode with PlatformIO IDE ext
 **Option B: Build from Command Line**
 If PlatformIO is installed globally (via `pip install platformio`):
 ```bash
-cd TrailCurrentAirQualityModule  # (example)
+cd TrailCurrentBorealis  # (example)
 platformio run
 ```
 
@@ -78,7 +85,7 @@ env.Replace(PROGNAME="tcairqlty")  # Results in tcairqlty.bin
 Navigate to your GitHub repository or use the `gh` CLI:
 
 **Via GitHub Web UI:**
-1. Go to your repository on GitHub (e.g., `github.com/TrailCurrent/TrailCurrentAirQualityModule`)
+1. Go to your repository on GitHub (e.g., `github.com/TrailCurrent/TrailCurrentBorealis`)
 2. Navigate to **Releases** → **Create a new release**
 3. Enter a version tag: `v1.2.3` (must follow semver format)
 4. Add the firmware binary as an attachment (name it `firmware.bin`)
@@ -103,7 +110,7 @@ git push origin v1.2.3
 # Step 4: Create GitHub release with firmware attached
 gh release create v1.2.3 \
   .pio/build/esp32-c6-devkitm-1/firmware.bin \
-  --repo TrailCurrent/TrailCurrentAirQualityModule \
+  --repo TrailCurrent/TrailCurrentBorealis \
   --title "v1.2.3" \
   --notes "Firmware release v1.2.3"
 ```
@@ -118,7 +125,7 @@ gh release create v1.2.3 \
 Check that the firmware asset appears in the release:
 
 ```bash
-gh release view v1.2.3 --repo TrailCurrent/TrailCurrentAirQualityModule
+gh release view v1.2.3 --repo TrailCurrent/TrailCurrentBorealis
 ```
 
 You should see `firmware.bin` listed as an asset.
@@ -160,10 +167,10 @@ Fetching MCU Firmware from GitHub
 Organization: TrailCurrent
 Target version: v1.0.0
 
-Checking TrailCurrentEightButtonPanel (v1.0.0)... Downloaded (245K)
-Checking TrailCurrentPowerControlModule (v1.0.0)... Downloaded (312K)
-Checking TrailCurrentGnssModule (v1.0.0)... Not found (skipping)
-Checking TrailCurrentAirQualityModule (v1.0.0)... Downloaded (268K)
+Checking TrailCurrentBorealis (v1.0.0)... Downloaded (268K)
+Checking TrailCurrentPicket (v1.0.0)... Downloaded (245K)
+Checking TrailCurrentTapper (v1.0.0)... Downloaded (312K)
+Checking TrailCurrentTherma (v1.0.0)... Not found (skipping)
 
 ==========================================
 Firmware Fetch Summary
@@ -174,9 +181,9 @@ Skipped:    1 device(s) (no release at this version)
 Failed:     0 device(s)
 
 Firmware structure:
-  firmware/wired/eight_button_panel/firmware.bin
-  firmware/wired/power_control_module/firmware.bin
-  firmware/wired/air_quality_module/firmware.bin
+  firmware/wired/borealis/firmware.bin
+  firmware/wired/picket/firmware.bin
+  firmware/wired/tapper/firmware.bin
 ```
 
 **Notes:**
@@ -194,7 +201,7 @@ To integrate a new MCU module:
    ```bash
    DEVICES=(
        # ... existing entries ...
-       "TrailCurrentNewModule|new_module"
+       "TrailCurrentNewModule|newmodule"
    )
    ```
 

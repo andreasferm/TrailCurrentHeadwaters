@@ -170,17 +170,20 @@ The `deploy.sh` script automatically:
 This allows Docker containers and host scripts to each use their appropriate MQTT broker address.
 
 ### Module Type to Firmware Mapping
-Firmware directories use snake_case module types:
+Firmware directories use module type names matching MCU_MODULES IDs:
 ```
 firmware/wired/
-├── air_quality_module/firmware.bin
-├── cabinet_door_sensor/firmware.bin
-├── eight_button_panel/firmware.bin
-├── gnss_module/firmware.bin
-├── mppt_can_gateway/firmware.bin
-├── power_control_module/firmware.bin
-├── shunt_gateway/firmware.bin
-└── wall_mounted_display/firmware.bin
+├── aftline/firmware.bin
+├── ampline/firmware.bin
+├── bearing/firmware.bin
+├── borealis/firmware.bin
+├── milepost/firmware.bin
+├── picket/firmware.bin
+├── plateau/firmware.bin
+├── solstice/firmware.bin
+├── tapper/firmware.bin
+├── therma/firmware.bin
+└── torrent/firmware.bin
 ```
 
 ## Database Schema

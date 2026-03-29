@@ -6,10 +6,8 @@ const mqttService = require('../mqtt');
 const FIRMWARE_DIR = '/app/firmware';
 const OTA_WAIT_MS = 5000; // Wait for module to start HTTP server after CAN trigger
 
-module.exports = (db) => {
+module.exports = () => {
     const router = express.Router();
-    const systemConfig = db.collection('system_config');
-
     // POST /api/ota/trigger - Trigger OTA update for a device
     // Sends CAN 0x00, waits for module to start HTTP server, then POSTs firmware
     router.post('/trigger', async (req, res) => {
@@ -85,9 +83,6 @@ module.exports = (db) => {
                 if (response.ok) {
                     const text = await response.text();
                     console.log(`[OTA] Firmware uploaded to ${hostname}: ${text}`);
-
-                    // Update firmware version in module record if available
-                    await updateModuleFirmwareVersion(systemConfig, hostname, firmware_file);
 
                     if (broadcast) {
                         broadcast('ota_progress', { hostname, status: 'complete', message: 'Firmware uploaded, module rebooting' });
@@ -170,28 +165,3 @@ module.exports = (db) => {
 
     return router;
 };
-
-// Update the fw field on the module record after successful OTA
-async function updateModuleFirmwareVersion(systemConfig, hostname, firmwareFile) {
-    try {
-        const config = await systemConfig.findOne({ _id: 'main' });
-        if (!config || !config.mcu_modules) return;
-
-        const modules = config.mcu_modules;
-        const module = modules.find(m => m.hostname === hostname);
-        if (!module) return;
-
-        // Extract version from filename if possible (e.g., "picket-1.2.0.bin")
-        const versionMatch = firmwareFile.match(/(\d+\.\d+\.\d+)/);
-        if (versionMatch) {
-            module.fw = versionMatch[1];
-            await systemConfig.updateOne(
-                { _id: 'main' },
-                { $set: { mcu_modules: modules, updated_at: new Date() } }
-            );
-            console.log(`[OTA] Updated firmware version for ${hostname} to ${module.fw}`);
-        }
-    } catch (err) {
-        console.error(`[OTA] Failed to update firmware version for ${hostname}:`, err.message);
-    }
-}
