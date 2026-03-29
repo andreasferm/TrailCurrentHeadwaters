@@ -11,6 +11,7 @@ const MODULE_DISPLAY_NAMES = Object.fromEntries(MCU_MODULES.map(m => [m.id, m.na
 // Ephemeral discovery session state
 let discoveredModules = [];
 let discoveryActive = false;
+let discoveryTimeout = null;
 
 // Pending confirm callbacks: hostname -> { resolve, reject, timer }
 const pendingConfirms = new Map();
@@ -23,32 +24,45 @@ module.exports = (db) => {
         try {
             // Read WiFi credentials from system config
             const config = await systemConfig.findOne({ _id: 'main' });
-            if (config && config.wifi_ssid && config.wifi_password_encrypted && config.wifi_password_iv) {
-                try {
-                    const password = decrypt(config.wifi_password_encrypted, config.wifi_password_iv);
-                    if (config.wifi_ssid && password) {
-                        console.log('[Discovery] Broadcasting WiFi credentials via CAN 0x01');
-                        mqttService.publishWifiCredentials(config.wifi_ssid, password);
-                    }
-                } catch (err) {
-                    console.error('[Discovery] Failed to decrypt WiFi password:', err.message);
-                }
-            }
-
             // Ignore if already scanning
             if (discoveryActive) {
                 return res.json({ success: true, message: 'Discovery already active' });
+            }
+
+            // Check MQTT is connected before proceeding
+            if (!mqttService.connected) {
+                return res.status(503).json({ error: 'MQTT broker not connected' });
             }
 
             // Clear previous session
             discoveredModules = [];
             discoveryActive = true;
 
-            // Wait for WiFi credential frames to finish before triggering discovery
-            setTimeout(() => {
-                mqttService.publishDiscoveryTrigger();
-                mqttService.publishDiscoveryBrowseStart();
-            }, 500);
+            // Auto-reset discoveryActive after timeout (safety net if frontend disconnects)
+            if (discoveryTimeout) clearTimeout(discoveryTimeout);
+            discoveryTimeout = setTimeout(() => {
+                if (discoveryActive) {
+                    console.log('[Discovery] Auto-stopping after timeout');
+                    discoveryActive = false;
+                    mqttService.publishDiscoveryBrowseStop();
+                }
+            }, 40000);
+
+            // Broadcast WiFi credentials first, then trigger discovery after they finish
+            if (config && config.wifi_ssid && config.wifi_password_encrypted && config.wifi_password_iv) {
+                try {
+                    const password = decrypt(config.wifi_password_encrypted, config.wifi_password_iv);
+                    if (config.wifi_ssid && password) {
+                        console.log('[Discovery] Broadcasting WiFi credentials via CAN 0x01');
+                        await mqttService.publishWifiCredentials(config.wifi_ssid, password);
+                    }
+                } catch (err) {
+                    console.error('[Discovery] Failed to decrypt WiFi password:', err.message);
+                }
+            }
+
+            mqttService.publishDiscoveryTrigger();
+            mqttService.publishDiscoveryBrowseStart();
 
             res.json({ success: true, message: 'Discovery started' });
         } catch (error) {
@@ -167,6 +181,7 @@ module.exports = (db) => {
     // POST /api/discovery/stop — Stop the mDNS browse session
     router.post('/stop', (req, res) => {
         discoveryActive = false;
+        if (discoveryTimeout) { clearTimeout(discoveryTimeout); discoveryTimeout = null; }
         mqttService.publishDiscoveryBrowseStop();
         res.json({ success: true, message: 'Discovery stopped' });
     });
@@ -229,7 +244,7 @@ function confirmViaProxy(hostname) {
         const timer = setTimeout(() => {
             pendingConfirms.delete(hostname);
             reject(new Error(`Confirm timed out for ${hostname}`));
-        }, 15000);
+        }, 40000);
 
         pendingConfirms.set(hostname, { resolve, reject, timer });
 

@@ -205,19 +205,32 @@ def on_disconnect(client, userdata, flags, reason_code, properties):
 
 
 def confirm_module(hostname, mqtt_publish):
-    """Call the module's /discovery/confirm endpoint and publish the result."""
-    print(f"[Confirm] Calling http://{hostname}.local/discovery/confirm")
-    try:
-        req = Request(f"http://{hostname}.local/discovery/confirm", method='GET')
-        resp = urlopen(req, timeout=10)
-        body = resp.read().decode('utf-8').strip()
-        print(f"[Confirm] Module {hostname} responded: {body}")
-        result = {'hostname': hostname, 'success': True}
-    except Exception as e:
-        print(f"[Confirm] Failed to reach {hostname}: {e}")
-        result = {'hostname': hostname, 'success': False, 'error': str(e)}
+    """Call the module's /discovery/confirm endpoint and publish the result.
+    Retries up to 3 times for transient network errors (mDNS stale cache, etc.)."""
+    url = f"http://{hostname}.local/discovery/confirm"
+    max_attempts = 3
+    last_error = None
 
-    mqtt_publish(MQTT_TOPIC_CONFIRM_RESPONSE, json.dumps(result), qos=1)
+    for attempt in range(1, max_attempts + 1):
+        print(f"[Confirm] Attempt {attempt}/{max_attempts}: {url}")
+        try:
+            req = Request(url, method='GET')
+            resp = urlopen(req, timeout=10)
+            body = resp.read().decode('utf-8').strip()
+            print(f"[Confirm] Module {hostname} responded: {body}")
+            mqtt_publish(MQTT_TOPIC_CONFIRM_RESPONSE,
+                         json.dumps({'hostname': hostname, 'success': True}), qos=1)
+            return
+        except Exception as e:
+            last_error = e
+            print(f"[Confirm] Attempt {attempt} failed for {hostname}: {e}")
+            if attempt < max_attempts:
+                time.sleep(2)
+
+    print(f"[Confirm] All attempts failed for {hostname}: {last_error}")
+    mqtt_publish(MQTT_TOPIC_CONFIRM_RESPONSE,
+                 json.dumps({'hostname': hostname, 'success': False, 'error': str(last_error)}),
+                 qos=1)
 
 
 def on_message(client, userdata, msg):

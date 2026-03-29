@@ -297,6 +297,7 @@ export const configPage = {
                     <span class="discovery-status-text">Scanning for modules...</span>
                 </div>
                 <div id="config-discovered-modules" class="discovered-modules"></div>
+                <div id="discovery-message" class="ota-message hidden"></div>
                 ${this.renderModuleList(modules)}
             `;
 
@@ -558,6 +559,28 @@ export const configPage = {
         }
     },
 
+    showDiscoveryMessage(message, type) {
+        const messageEl = document.getElementById('discovery-message');
+        if (messageEl) {
+            messageEl.textContent = message;
+            messageEl.className = `ota-message ${type}`;
+            messageEl.classList.remove('hidden');
+
+            if (type === 'success') {
+                setTimeout(() => {
+                    messageEl.classList.add('hidden');
+                }, 4000);
+            }
+        }
+    },
+
+    clearDiscoveryMessage() {
+        const messageEl = document.getElementById('discovery-message');
+        if (messageEl) {
+            messageEl.classList.add('hidden');
+        }
+    },
+
     setupListeners() {
         // Add module button
         const addBtn = document.getElementById('add-module-btn');
@@ -663,6 +686,11 @@ export const configPage = {
         const scanBtn = document.getElementById('add-module-btn');
         const statusEl = document.getElementById('config-discovery-status');
 
+        // Clear previous session UI
+        this.clearDiscoveryMessage();
+        const prevCards = document.getElementById('config-discovered-modules');
+        if (prevCards) prevCards.innerHTML = '';
+
         try {
             await API.startDiscovery();
             configDiscoveryActive = true;
@@ -683,7 +711,18 @@ export const configPage = {
             configDiscoveryTimeout = setTimeout(() => this.stopConfigDiscovery(), 35000);
         } catch (error) {
             console.error('Failed to start discovery:', error);
-            this.showOtaMessage('Failed to start discovery: ' + error.message, 'error');
+            configDiscoveryActive = false;
+            this.showDiscoveryMessage('Failed to start discovery: ' + error.message, 'error');
+            // Reset button back to scan state
+            if (scanBtn) {
+                scanBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M12 5v14M5 12h14"></path>
+                    </svg>
+                    Scan for Devices
+                `;
+            }
+            if (statusEl) statusEl.classList.add('hidden');
         }
     },
 
@@ -743,15 +782,18 @@ export const configPage = {
         const card = document.querySelector(`.discovered-module-card[data-hostname="${hostname}"]`);
         const btn = card?.querySelector('[data-action="confirm-discovered"]');
         if (btn) { btn.disabled = true; btn.textContent = 'Confirming...'; }
+        this.clearDiscoveryMessage();
 
         try {
+            this.showDiscoveryMessage('Contacting module (this may take a moment)...', 'success');
             await API.confirmModule(hostname);
+            this.clearDiscoveryMessage();
             if (card) card.remove();
             await this.reloadModules();
         } catch (error) {
             console.error('Failed to confirm module:', error);
-            if (btn) { btn.disabled = false; btn.textContent = 'Confirm'; }
-            this.showOtaMessage('Failed to confirm: ' + error.message, 'error');
+            if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+            this.showDiscoveryMessage('Failed to confirm: ' + error.message, 'error');
         }
     },
 
@@ -998,6 +1040,7 @@ export const configPage = {
                     <span class="discovery-status-text">Scanning for modules...</span>
                 </div>
                 <div id="config-discovered-modules" class="discovered-modules"></div>
+                <div id="discovery-message" class="ota-message hidden"></div>
                 ${this.renderModuleList(modules)}
             `;
             this.setupListeners();

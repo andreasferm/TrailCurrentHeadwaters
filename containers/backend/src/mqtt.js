@@ -596,15 +596,20 @@ class MqttService {
         const ssidChunks = Math.ceil(ssidBytes.length / 6);
         const passwordChunks = Math.ceil(passwordBytes.length / 6);
 
-        // Helper to send with delay
+        // Helper to send with delay — returns a promise that resolves when all sent
         const sendWithDelay = (messages, index = 0) => {
-            if (index >= messages.length) {
-                console.log('[WiFi Config] All messages sent');
-                return;
-            }
-
-            this.publishCanMessage(0x01, messages[index]);
-            setTimeout(() => sendWithDelay(messages, index + 1), 50);
+            return new Promise((resolve) => {
+                const sendNext = (i) => {
+                    if (i >= messages.length) {
+                        console.log('[WiFi Config] All messages sent');
+                        resolve();
+                        return;
+                    }
+                    this.publishCanMessage(0x01, messages[i]);
+                    setTimeout(() => sendNext(i + 1), 50);
+                };
+                sendNext(index);
+            });
         };
 
         // Build message sequence
@@ -643,9 +648,8 @@ class MqttService {
         for (let i = 0; i < passwordBytes.length; i++) checksum ^= passwordBytes[i];
         messages.push([0x04, checksum, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
-        // Send sequence with delays
-        sendWithDelay(messages);
-        return true;
+        // Send sequence with delays — returns promise
+        return sendWithDelay(messages);
     }
 
     /**
