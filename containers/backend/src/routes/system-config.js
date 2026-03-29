@@ -238,10 +238,6 @@ module.exports = (db) => {
                     if (typeof mod.type !== 'string' || typeof mod.name !== 'string' || typeof mod.hostname !== 'string') {
                         return res.status(400).json({ error: 'Module type, name, and hostname must be strings' });
                     }
-                    // Discovery fields are optional (set by discovery process)
-                    if (mod.canid !== undefined && typeof mod.canid !== 'string') {
-                        return res.status(400).json({ error: 'Module canid must be a string' });
-                    }
                     if (mod.fw !== undefined && typeof mod.fw !== 'string') {
                         return res.status(400).json({ error: 'Module fw must be a string' });
                     }

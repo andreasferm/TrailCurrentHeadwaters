@@ -35,7 +35,6 @@ const createModulesRouter = (db) => {
                 type: m.type,
                 hostname: m.hostname || '',
                 addr: m.addr,
-                canid: m.canid || '',
                 fw: m.fw || '',
                 enabled: m.enabled,
                 config: m.config || {},
@@ -62,7 +61,7 @@ const createModulesRouter = (db) => {
     // POST /api/modules - Create a new module
     router.post('/', async (req, res) => {
         try {
-            const { name, type, hostname, addr, canid, fw, config } = req.body;
+            const { name, type, hostname, addr, fw, config } = req.body;
 
             // Validation
             if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -86,7 +85,6 @@ const createModulesRouter = (db) => {
                 type: type,
                 hostname: hostname.trim(),
                 addr: addr !== undefined ? addr : null,
-                canid: canid || '',
                 fw: fw || '',
                 enabled: true,
                 config: config || {},
@@ -170,7 +168,6 @@ const createModulesRouter = (db) => {
                 type: module.type,
                 hostname: module.hostname || '',
                 addr: module.addr,
-                canid: module.canid || '',
                 fw: module.fw || '',
                 enabled: module.enabled,
                 config: module.config || {},

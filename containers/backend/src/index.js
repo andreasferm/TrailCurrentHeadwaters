@@ -99,7 +99,7 @@ async function startServer() {
 
         // Initialize CAN bridge (subscribes to can/inbound, routes to local/* topics)
         const canBridge = require('./services/can-bridge');
-        canBridge.init(mqttService);
+        canBridge.init(mqttService, db);
 
         // Connect cloud bridge if cloud is enabled
         const cloudBridge = require('./services/cloud-bridge');

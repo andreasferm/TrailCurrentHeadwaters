@@ -127,7 +127,6 @@ module.exports = (db) => {
                 name: name,
                 hostname: found.hostname,
                 addr: found.addr,
-                canid: found.canid,
                 fw: found.fw,
                 enabled: true,
                 config: {}
@@ -224,7 +223,6 @@ module.exports.addDiscoveredModule = function(moduleData) {
         hostname: moduleData.hostname,
         type: moduleData.type,
         addr: moduleData.addr,
-        canid: moduleData.canid,
         fw: moduleData.fw,
         discovered_at: new Date().toISOString()
     });

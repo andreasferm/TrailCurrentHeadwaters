@@ -20,6 +20,10 @@ function toBitArray(byte) {
 
 let energyState = {};
 
+// ── Database reference (set during init) ────────────────────────────
+
+let systemConfig = null;
+
 // ── CAN ID → parser table ───────────────────────────────────────────
 
 const CHARGE_TYPES = { 0: 'off', 2: 'fault', 3: 'bulk', 4: 'absorption', 5: 'float', 7: 'equalize' };
@@ -29,6 +33,31 @@ const CHARGE_TYPES = { 0: 'off', 2: 'fault', 3: 'bulk', 4: 'absorption', 5: 'flo
 const SWITCHBACK_RELAY_OFFSET = { '0x028': 0, '0x029': 8, '0x02a': 16 };
 
 const parsers = {
+    // ── Firmware version broadcast (0x004) ─────────────────────────
+    '0x004': async (data) => {
+        if (!systemConfig) return;
+        const decoded = decodeBitArrays(data);
+        const mac3 = decoded[0], mac4 = decoded[1], mac5 = decoded[2];
+        const hostname = `esp32-${mac3.toString(16).padStart(2, '0')}${mac4.toString(16).padStart(2, '0')}${mac5.toString(16).padStart(2, '0')}`;
+        const fw = `${decoded[3]}.${decoded[4]}.${decoded[5]}`;
+
+        try {
+            const config = await systemConfig.findOne({ _id: 'main' });
+            if (!config || !config.mcu_modules) return;
+            const module = config.mcu_modules.find(m => m.hostname === hostname);
+            if (!module || module.fw === fw) return;
+
+            module.fw = fw;
+            await systemConfig.updateOne(
+                { _id: 'main' },
+                { $set: { mcu_modules: config.mcu_modules, updated_at: new Date() } }
+            );
+            console.log(`[CAN Bridge] Updated firmware version for ${hostname} to ${fw}`);
+        } catch (err) {
+            console.error(`[CAN Bridge] Failed to update fw for ${hostname}:`, err.message);
+        }
+    },
+
     // ── Lights (0x01b) ─────────────────────────────────────────────
     '0x01b': (data, mqtt) => {
         const decoded = decodeBitArrays(data);
@@ -232,7 +261,10 @@ function sendRelayAll(mqttService, state) {
 
 // ── Init (subscribes to can/inbound on the local MQTT client) ───────
 
-function init(mqttService) {
+function init(mqttService, db) {
+    if (db) {
+        systemConfig = db.collection('system_config');
+    }
     const client = mqttService.client;
     if (!client) {
         console.error('[CAN Bridge] MQTT client not available');
