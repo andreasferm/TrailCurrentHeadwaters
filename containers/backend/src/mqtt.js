@@ -348,27 +348,27 @@ class MqttService {
         }
     }
 
-    // Publish relay toggle command — sends CAN ID 0x025 directly
-    publishRelayToggle(channel) {
+    // Publish relay toggle command — sends CAN ID 0x025+instance
+    publishRelayToggle(channel, instance) {
         if (!this.connected) {
             console.warn('MQTT not connected, cannot publish relay toggle');
             return false;
         }
 
         const canBridge = require('./services/can-bridge');
-        canBridge.sendRelayToggle(this, channel);
+        canBridge.sendRelayToggle(this, channel, instance);
         return true;
     }
 
-    // Publish relay all on/off command — sends CAN ID 0x025 [0xFF, state] directly
-    publishRelayAllCommand(state) {
+    // Publish relay all on/off command — sends CAN ID 0x025+instance [0x08, state]
+    publishRelayAllCommand(state, instance) {
         if (!this.connected) {
             console.warn('MQTT not connected, cannot publish relay all command');
             return false;
         }
 
         const canBridge = require('./services/can-bridge');
-        canBridge.sendRelayAll(this, state);
+        canBridge.sendRelayAll(this, state, instance);
         return true;
     }
 

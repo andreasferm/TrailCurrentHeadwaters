@@ -30,10 +30,10 @@ module.exports = (db) => {
             // Send CAN all-on/all-off: ID 0x18, ButtonOrCommand=8, CommandValue=state
             mqttService.publishCanMessage(0x18, [8, state]);
 
-            // Also send all-relay command if any Switchback relays are configured
-            const relayCount = await lights.countDocuments({ source: 'switchback' });
-            if (relayCount > 0) {
-                mqttService.publishRelayAllCommand(state);
+            // Send all-relay command to each Switchback instance
+            const instances = await lights.distinct('relay_instance', { source: 'switchback' });
+            for (const instance of instances) {
+                mqttService.publishRelayAllCommand(state, instance);
             }
 
             res.json({ success: true, state });
@@ -71,7 +71,7 @@ module.exports = (db) => {
             // Route command based on device source
             if (light.source === 'switchback') {
                 // Switchback relays are toggle-only — ignore state/brightness
-                mqttService.publishRelayToggle(light.relay_channel);
+                mqttService.publishRelayToggle(light.relay_channel, light.relay_instance);
             } else {
                 // Normal PDM light — send explicit state/brightness
                 mqttService.publishLightCommand(lightId, state, brightness);

@@ -58,7 +58,8 @@ async function syncSwitchbackChannelsToLights(db, mqttService) {
                         icon: ch.icon || 'power-outlet',
                         type: ch.type || 'other',
                         source: 'switchback',
-                        relay_channel: ch.channel - 1, // CAN channel index is 0-based
+                        relay_channel: ch.channel - 1, // CAN channel index is 0-based (0-7 within instance)
+                        relay_instance: sbIndex,        // Switchback instance (0, 1, 2) — determines CAN ID offset
                         updated_at: new Date()
                     }
                 },

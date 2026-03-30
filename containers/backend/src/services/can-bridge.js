@@ -251,12 +251,14 @@ function sendLightBrightness(mqttService, deviceIndex, brightness) {
     mqttService.publishCanMessage(0x015, [deviceIndex, brightness]);
 }
 
-function sendRelayToggle(mqttService, channelIndex) {
-    mqttService.publishCanMessage(0x025, [channelIndex]);
+function sendRelayToggle(mqttService, channelIndex, instance) {
+    const canId = 0x025 + (instance || 0);
+    mqttService.publishCanMessage(canId, [channelIndex]);
 }
 
-function sendRelayAll(mqttService, state) {
-    mqttService.publishCanMessage(0x025, [0xFF, state ? 1 : 0]);
+function sendRelayAll(mqttService, state, instance) {
+    const canId = 0x025 + (instance || 0);
+    mqttService.publishCanMessage(canId, [0x08, state ? 1 : 0]);
 }
 
 // ── Init (subscribes to can/inbound on the local MQTT client) ───────
