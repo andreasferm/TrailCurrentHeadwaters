@@ -38,7 +38,7 @@ const parsers = {
         if (!systemConfig) return;
         const decoded = decodeBitArrays(data);
         const mac3 = decoded[0], mac4 = decoded[1], mac5 = decoded[2];
-        const hostname = `esp32-${mac3.toString(16).padStart(2, '0')}${mac4.toString(16).padStart(2, '0')}${mac5.toString(16).padStart(2, '0')}`;
+        const hostname = `esp32-${mac3.toString(16).toUpperCase().padStart(2, '0')}${mac4.toString(16).toUpperCase().padStart(2, '0')}${mac5.toString(16).toUpperCase().padStart(2, '0')}`;
         const fw = `${decoded[3]}.${decoded[4]}.${decoded[5]}`;
 
         try {
