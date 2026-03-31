@@ -6,13 +6,43 @@ the steps in order with no gaps.
 
 ## Hardware Requirements
 
-- Raspberry Pi Compute Module 5 (CM5 or CM5 Lite — eMMC is not used)
+### Compute Module
+
+Raspberry Pi Compute Module 5 with **4 GB RAM** (required — Docker images
+alone use ~3.8 GB during first-boot loading).
+
+| Variant | Works? | Notes |
+|---------|--------|-------|
+| CM5 (with eMMC) | Yes | eMMC is present but unused — boots from NVMe only |
+| CM5 Lite (no eMMC) | Yes | Enters USB boot automatically — no jumper needed for flashing |
+| With WiFi | Yes | WiFi is disabled in config.txt for power savings, but the module works |
+| Without WiFi | Yes | Recommended — saves cost since WiFi is not used (Ethernet only) |
+| 2 GB RAM | No | Insufficient for Docker image loading and container runtime |
+| 8 GB RAM | Yes | Works but unnecessary — typical runtime uses ~730 MB |
+
+**Recommended SKU:** CM5 Lite, 4 GB, without WiFi — lowest cost for this
+workload. Any 4 GB variant will work identically.
+
+### NVMe SSD
+
+| Capacity | Status | Notes |
+|----------|--------|-------|
+| 128 GB | Minimum | ~30 GB used by OS + Docker images + map tiles. Leaves limited headroom for logs and data growth |
+| 256 GB | Recommended | Comfortable headroom for long-term deployments |
+
+The NVMe must be M.2 form factor matching the carrier board slot (typically
+2230 or 2242). For high-temperature deployments (enclosed trailers), consider
+an industrial-grade NVMe rated to 85 C (e.g., Transcend MTE552T, ATP N600Ri).
+
+### Other Components
+
 - CM5 carrier board (IO Board or custom) with:
   - USB-C port for flashing
   - EMMC_DISABLE jumper (sometimes labelled "nRPIBOOT" or "Disable eMMC Boot")
     — only needed for CM5 with eMMC; CM5 Lite enters USB boot automatically
   - NVMe M.2 slot (M-key or B+M-key)
-- NVMe SSD (128 GB+ recommended) — this is the boot and root drive
+  - Dedicated FAN connector (PWM-capable, for active cooler)
+- Waveshare CM5 Active Cooler (recommended for enclosed deployments)
 - Waveshare RS485 CAN HAT (B) (MCP2515, SPI0/CE0, 16 MHz crystal, GPIO25 interrupt)
 - Ethernet connection
 - A Linux computer for building and flashing (Debian/Ubuntu, arm64 or x86_64)
@@ -462,7 +492,11 @@ These are copied into `/home/trailcurrent/` during the image build:
 | `dtparam=audio=off` | disabled | Power savings |
 | `gpu_mem=16` | 16 MB | Minimum GPU allocation (headless) |
 | `arm_freq=600` | 600 MHz | Underclocked — workload uses ~15% at 1.7 GHz |
-| `dtparam=fan_temp0=50000` | 50 C | Lower fan threshold for enclosed operation |
+| `dtparam=i2c_arm=on` | enabled | Required for Waveshare CM5 active cooler fan controller |
+| `dtparam=cooling_fan` | enabled | Activates the CM5 PWM fan cooling driver |
+| `dtparam=fan_temp0=45000,...` | 45 C / 5 C hyst / speed 75 | Fan low speed (~30%) — light cooling |
+| `dtparam=fan_temp1=55000,...` | 55 C / 5 C hyst / speed 150 | Fan medium (~60%) — warm ambient |
+| `dtparam=fan_temp2=65000,...` | 65 C / 5 C hyst / speed 255 | Fan full blast — prevents thermal throttle |
 
 > **Do not add `over_voltage` settings.** CM5 silicon varies between chips —
 > undervolting (e.g., `over_voltage=-4`) can prevent some boards from booting
@@ -529,6 +563,60 @@ does not exist. It runs once — subsequent logins skip it.
 - Check the can0 service: `systemctl status can0`
 - The MCP2515 needs ~15 seconds after power-on to stabilize (the service
   handles this with a sleep)
+
+### Fan not spinning (Waveshare CM5 Active Cooler)
+
+The Waveshare CM5 active cooler uses PWM fan control. The fan spins briefly
+on power-on (raw 5V before Linux loads), then the kernel's thermal governor
+takes over and controls speed based on CPU temperature. The fan requires
+**I2C enabled** and the **`cooling_fan` dtparam** to function.
+
+> **Note:** The image build configures both I2C and the fan automatically.
+> These steps are only needed if troubleshooting a device that was set up
+> manually or with an older image.
+
+1. **Enable I2C** — the fan controller requires I2C:
+   ```bash
+   sudo raspi-config
+   ```
+   Navigate to **Interfacing Options > I2C** and enable it, then reboot.
+
+2. **Add fan configuration** to `/boot/firmware/config.txt`:
+   ```
+   dtparam=i2c_arm=on
+   dtparam=cooling_fan
+   dtparam=fan_temp0=45000,fan_temp0_hyst=5000,fan_temp0_speed=75
+   dtparam=fan_temp1=55000,fan_temp1_hyst=5000,fan_temp1_speed=150
+   dtparam=fan_temp2=65000,fan_temp2_hyst=5000,fan_temp2_speed=255
+   ```
+   Reboot for changes to take effect.
+
+3. **Verify the fan controller is loaded:**
+   ```bash
+   ls /sys/devices/platform/cooling_fan/
+   cat /sys/class/thermal/cooling_device0/type    # should say "pwm-fan"
+   ```
+
+4. **Check current state:**
+   ```bash
+   cat /sys/class/thermal/thermal_zone0/temp       # CPU temp (millidegrees)
+   cat /sys/class/hwmon/hwmon*/pwm1                 # PWM duty (0-255)
+   cat /sys/class/hwmon/hwmon*/fan1_input            # RPM (0 = not spinning)
+   ```
+   At low temperatures the fan runs at low PWM duty and may be inaudible.
+   This is normal — the thermal governor adjusts speed automatically.
+
+5. **Force full speed for testing** (temporarily disables thermal governor):
+   ```bash
+   echo 1 | sudo tee /sys/class/hwmon/hwmon*/pwm1_enable
+   echo 255 | sudo tee /sys/class/hwmon/hwmon*/pwm1
+   ```
+   The fan should spin at full speed. Reboot to restore automatic control.
+
+> **Connector note:** Ensure the fan is plugged into the dedicated **FAN
+> connector** on the carrier board, not a general-purpose GPIO header. The
+> fan only spins under kernel control — it will not run continuously during
+> boot or when powered off (the brief spin on power-on is normal).
 
 ### CM5 won't boot / "Firmware not found" error
 

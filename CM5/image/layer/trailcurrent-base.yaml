@@ -72,9 +72,14 @@ mmdebstrap:
       # ── Underclock to 600 MHz (ample for Mosquitto/MongoDB/backend workload) ──
       arm_freq=600
 
-      # ── Active cooler: lower fan threshold for enclosed operation ──
-      dtparam=fan_temp0=50000
-      dtparam=fan_temp0_hyst=5000
+      # ── I2C (required for Waveshare CM5 active cooler fan controller) ──
+      dtparam=i2c_arm=on
+
+      # ── Active cooler: multi-step fan ramp for enclosed operation ──
+      dtparam=cooling_fan
+      dtparam=fan_temp0=45000,fan_temp0_hyst=5000,fan_temp0_speed=75
+      dtparam=fan_temp1=55000,fan_temp1_hyst=5000,fan_temp1_speed=150
+      dtparam=fan_temp2=65000,fan_temp2_hyst=5000,fan_temp2_speed=255
       CFGEOF
 
     # ── can0 systemd service ─────────────────────────────────────────
