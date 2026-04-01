@@ -49,7 +49,7 @@ function setupLocalToCloud() {
 
     // Subscribe to all local status topics
     for (const mapping of LOCAL_TO_CLOUD) {
-        localClient.subscribe(mapping.local, { qos: 2 });
+        localClient.subscribe(mapping.local, { qos: 1 });
     }
     localClient.subscribe(SYSTEM_SYNC.local, { qos: 1 });
 
@@ -72,12 +72,12 @@ function setupLocalToCloud() {
                 if (match) {
                     const cloudTopic = mapping.cloudPrefix + match[1] + mapping.cloudSuffix;
                     if (!shouldSend(cloudTopic, rateLimitMs)) return;
-                    cloudClient.publish(cloudTopic, message, { qos: 2 });
+                    cloudClient.publish(cloudTopic, message, { qos: 1 });
                     return;
                 }
             } else if (topic === mapping.local) {
                 if (!shouldSend(mapping.cloud, rateLimitMs)) return;
-                cloudClient.publish(mapping.cloud, message, { qos: 2 });
+                cloudClient.publish(mapping.cloud, message, { qos: 1 });
                 return;
             }
         }
@@ -90,12 +90,12 @@ function setupCloudToLocal() {
     if (!cloudClient || !mqttServiceRef) return;
 
     // Subscribe to cloud command topics
-    cloudClient.subscribe('rv/lights/+/command', { qos: 2 });
-    cloudClient.subscribe('rv/lights/+/brightness', { qos: 2 });
-    cloudClient.subscribe('rv/lights/all/command', { qos: 2 });
-    cloudClient.subscribe('rv/relays/+/command', { qos: 2 });
-    cloudClient.subscribe('rv/relays/all/command', { qos: 2 });
-    cloudClient.subscribe('rv/thermostat/command', { qos: 2 });
+    cloudClient.subscribe('rv/lights/+/command', { qos: 1 });
+    cloudClient.subscribe('rv/lights/+/brightness', { qos: 1 });
+    cloudClient.subscribe('rv/lights/all/command', { qos: 1 });
+    cloudClient.subscribe('rv/relays/+/command', { qos: 1 });
+    cloudClient.subscribe('rv/relays/all/command', { qos: 1 });
+    cloudClient.subscribe('rv/thermostat/command', { qos: 1 });
 
     cloudClient.on('message', (topic, message) => {
         try {
@@ -132,7 +132,7 @@ function setupCloudToLocal() {
                 }
             } else if (parts[1] === 'thermostat' && parts[2] === 'command') {
                 // Pass through to local thermostat
-                localClient.publish('local/thermostat/command', message, { qos: 2 });
+                localClient.publish('local/thermostat/command', message, { qos: 1 });
             }
         } catch (err) {
             console.error('[Cloud Bridge] Error handling cloud command:', err.message);
