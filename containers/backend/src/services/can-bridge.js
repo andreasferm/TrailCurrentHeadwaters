@@ -159,7 +159,7 @@ const parsers = {
         const isNegative = decoded[0] === 0xFF;
         const wattage = (decoded[1] << 8) | decoded[2];
         const ttg = (decoded[3] << 8) | decoded[4];
-        const fields = { consumption_watts: isNegative ? 0 : wattage };
+        const fields = { consumption_watts: isNegative ? wattage : 0 };
         if (ttg > 0 && ttg < 0xFFFF) {
             fields.time_remaining_minutes = ttg;
         }
