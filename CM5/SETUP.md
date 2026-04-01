@@ -179,6 +179,11 @@ The password is hashed with `openssl passwd -6` before being passed to
 rpi-image-gen, so there are no complexity restrictions — use whatever
 password you want.
 
+The build configures **passwordless sudo** for the chosen user. This is
+required for unattended cloud deployments — `deploy.sh` uses `sudo` to
+manage systemd services, and the deployment-watcher runs
+non-interactively.
+
 The script will:
 1. Verify Docker image tars and map tiles exist
 2. Clone `rpi-image-gen` from GitHub (first run only)
@@ -348,10 +353,12 @@ The CM5 boots from NVMe. On the first boot, two services run automatically:
 First boot takes 3-5 minutes. You can monitor progress via:
 
 ```bash
-ssh trailcurrent@headwaters.local
+ssh myuser@headwaters.local
 journalctl -u trailcurrent-firstboot -f
 journalctl -u trailcurrent-load-images -f
 ```
+
+Replace `myuser` with the username you chose when building the image.
 
 After first boot completes, **reboot once** for the EEPROM changes to take
 effect:
@@ -366,13 +373,14 @@ After reboot, SSH into the device. The first-login setup wizard runs
 automatically when no `.env` file exists:
 
 ```bash
-ssh trailcurrent@headwaters.local
+ssh myuser@headwaters.local
 ```
+
+Replace `myuser` with the username you chose when building the image.
 
 The wizard will prompt you for:
 - **MQTT username and password** (default username: `trailcurrent`)
 - **Admin password** (for the web UI)
-- **Device hostname** (default: `headwaters.local`)
 
 The wizard **automatically generates** cryptographic secrets:
 - `ENCRYPTION_KEY` (WiFi credential encryption, 32 bytes)
@@ -441,7 +449,7 @@ For each board:
   6. sudo dd if=...img of=/dev/sdX bs=4M status=progress conv=fsync  # Flash NVMe (~28GB)
   7. Remove jumper, disconnect USB, connect Ethernet, power cycle
   8. Wait for first boot (~3-5 min), then: sudo reboot
-  9. SSH in — first-login wizard runs automatically, set passwords
+  9. SSH in (ssh myuser@headwaters.local) — first-login wizard runs, set passwords
  10. Verify: docker compose ps && curl -k https://localhost/api/health
 ```
 
@@ -466,7 +474,7 @@ filesystem.
 
 ### Baked-In Application Artifacts
 
-These are copied into `/home/trailcurrent/` during the image build:
+These are copied into the chosen user's home directory during the image build:
 
 | Path | Source | Purpose |
 |------|--------|---------|
@@ -716,8 +724,11 @@ Files referenced by the image build but located elsewhere in the repo:
 
 ### On the CM5 Device (After Flashing)
 
+Paths below use `~` for the chosen user's home directory (e.g.,
+`/home/trailcurrent/` if the default username was used).
+
 ```
-/home/trailcurrent/
+~/
 ├── .env                      <- Created by first-login wizard (not baked in)
 ├── .env.example              <- Reference template
 ├── docker-compose.yml        <- Service orchestration

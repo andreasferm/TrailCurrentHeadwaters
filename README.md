@@ -178,10 +178,12 @@ This will:
 
 **Transfer and deploy to device:**
 ```bash
-scp trailcurrent-deployment-1.0.0.zip trailcurrent@headwaters.local:~
+scp trailcurrent-deployment-1.0.0.zip myuser@headwaters.local:~
 # On the device:
 unzip -o trailcurrent-deployment-1.0.0.zip && ./deploy.sh
 ```
+
+Replace `myuser` with the username configured when the CM5 image was built.
 
 See [PI_DEPLOYMENT.md](PI_DEPLOYMENT.md) for detailed deployment instructions.
 
