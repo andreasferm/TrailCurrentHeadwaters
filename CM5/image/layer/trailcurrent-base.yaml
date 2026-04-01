@@ -133,7 +133,7 @@ mmdebstrap:
     #   - data/tileserver/map.mbtiles  (map tile data)
     #
     - |
-      TC_HOME="$1/home/trailcurrent"
+      TC_HOME="$1/home/$IGconf_device_user1"
       REPO_ROOT="$SRCROOT/../.."
 
       # docker-compose.yml (service orchestration)
@@ -190,7 +190,7 @@ mmdebstrap:
     # ── First-login setup script + bash_profile hook ───────────────────
     - install -m 755 "$SRCROOT/layer/files/trailcurrent-first-login.sh" "$1/usr/local/bin/trailcurrent-first-login.sh"
     - |
-      TC_HOME="$1/home/trailcurrent"
+      TC_HOME="$1/home/$IGconf_device_user1"
       cat >> "$TC_HOME/.bash_profile" << 'BPEOF'
 
       # Run first-login setup if .env has not been created yet
@@ -227,13 +227,13 @@ mmdebstrap:
     # ── Docker image loader service (runs once after Docker starts) ───
     - install -m 755 "$SRCROOT/layer/files/trailcurrent-load-images.sh" "$1/usr/local/bin/trailcurrent-load-images.sh"
     - |
-      cat > "$1/etc/systemd/system/trailcurrent-load-images.service" << 'EOF'
+      cat > "$1/etc/systemd/system/trailcurrent-load-images.service" << EOF
       [Unit]
       Description=Load baked-in Docker images from tarballs
       After=docker.service trailcurrent-firstboot.service
       Requires=docker.service
-      ConditionPathExists=/home/trailcurrent/images
-      ConditionDirectoryNotEmpty=/home/trailcurrent/images
+      ConditionPathExists=/home/$IGconf_device_user1/images
+      ConditionDirectoryNotEmpty=/home/$IGconf_device_user1/images
 
       [Service]
       Type=oneshot
@@ -248,20 +248,20 @@ mmdebstrap:
 
     # ── cantomqtt systemd service (starts after deployment provides code) ──
     - |
-      cat > "$1/etc/systemd/system/cantomqtt.service" << 'SVCEOF'
+      cat > "$1/etc/systemd/system/cantomqtt.service" << SVCEOF
       [Unit]
       Description=CAN Bus to MQTT Service
       After=docker.service can0.service
       Requires=docker.service can0.service
       # Only start if deployment has provided the code
-      ConditionPathExists=/home/trailcurrent/local_code/can-to-mqtt.py
+      ConditionPathExists=/home/$IGconf_device_user1/local_code/can-to-mqtt.py
 
       [Service]
       Type=simple
-      User=trailcurrent
-      WorkingDirectory=/home/trailcurrent/local_code
-      EnvironmentFile=/home/trailcurrent/local_code/.env
-      ExecStart=/home/trailcurrent/local_code/cantomqtt/bin/python /home/trailcurrent/local_code/can-to-mqtt.py
+      User=$IGconf_device_user1
+      WorkingDirectory=/home/$IGconf_device_user1/local_code
+      EnvironmentFile=/home/$IGconf_device_user1/local_code/.env
+      ExecStart=/home/$IGconf_device_user1/local_code/cantomqtt/bin/python /home/$IGconf_device_user1/local_code/can-to-mqtt.py
       Restart=always
       RestartSec=10
 
@@ -271,21 +271,21 @@ mmdebstrap:
 
     # ── deployment-watcher systemd service ───────────────────────────
     - |
-      cat > "$1/etc/systemd/system/deployment-watcher.service" << 'SVCEOF'
+      cat > "$1/etc/systemd/system/deployment-watcher.service" << SVCEOF
       [Unit]
       Description=TrailCurrent Deployment Watcher
       After=docker.service network-online.target
       Requires=docker.service
       Wants=network-online.target
       # Only start if deployment has provided the code
-      ConditionPathExists=/home/trailcurrent/local_code/deployment-watcher.py
+      ConditionPathExists=/home/$IGconf_device_user1/local_code/deployment-watcher.py
 
       [Service]
       Type=simple
-      User=trailcurrent
-      WorkingDirectory=/home/trailcurrent/local_code
-      EnvironmentFile=/home/trailcurrent/local_code/.env
-      ExecStart=/home/trailcurrent/local_code/cantomqtt/bin/python /home/trailcurrent/local_code/deployment-watcher.py
+      User=$IGconf_device_user1
+      WorkingDirectory=/home/$IGconf_device_user1/local_code
+      EnvironmentFile=/home/$IGconf_device_user1/local_code/.env
+      ExecStart=/home/$IGconf_device_user1/local_code/cantomqtt/bin/python /home/$IGconf_device_user1/local_code/deployment-watcher.py
       Restart=always
       RestartSec=10
 
@@ -295,20 +295,20 @@ mmdebstrap:
 
     # ── discovery-mdns systemd service ────────────────────────────────
     - |
-      cat > "$1/etc/systemd/system/discovery-mdns.service" << 'SVCEOF'
+      cat > "$1/etc/systemd/system/discovery-mdns.service" << SVCEOF
       [Unit]
       Description=TrailCurrent mDNS Discovery Browser
       After=docker.service
       Requires=docker.service
-      ConditionPathExists=/home/trailcurrent/local_code/discovery-mdns.py
+      ConditionPathExists=/home/$IGconf_device_user1/local_code/discovery-mdns.py
 
       [Service]
       Type=simple
-      User=trailcurrent
-      WorkingDirectory=/home/trailcurrent/local_code
-      EnvironmentFile=/home/trailcurrent/local_code/.env
+      User=$IGconf_device_user1
+      WorkingDirectory=/home/$IGconf_device_user1/local_code
+      EnvironmentFile=/home/$IGconf_device_user1/local_code/.env
       Environment=PYTHONUNBUFFERED=1
-      ExecStart=/home/trailcurrent/local_code/cantomqtt/bin/python /home/trailcurrent/local_code/discovery-mdns.py
+      ExecStart=/home/$IGconf_device_user1/local_code/cantomqtt/bin/python /home/$IGconf_device_user1/local_code/discovery-mdns.py
       Restart=always
       RestartSec=10
 
@@ -323,7 +323,7 @@ mmdebstrap:
     - $BDEBSTRAP_HOOKS/enable-units "$1" can0 disable-usb docker trailcurrent-firstboot trailcurrent-load-images cantomqtt discovery-mdns deployment-watcher
 
     # ── Add default user to docker group ─────────────────────────────
-    - chroot "$1" usermod -aG docker trailcurrent
+    - chroot "$1" usermod -aG docker "$IGconf_device_user1"
 
   cleanup-hooks:
     # Remove apt caches to shrink the image

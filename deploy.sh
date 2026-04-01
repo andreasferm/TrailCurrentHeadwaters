@@ -68,6 +68,15 @@ fi
 
 cd "$(dirname "$0")"
 
+# Fix ownership of files that may be root-owned from a previous deployment or
+# image build. Without this, unzip cannot overwrite these files as a normal user.
+for dir in scripts config; do
+    if [ -d "$dir" ] && [ ! -w "$dir" ]; then
+        echo "Fixing ownership of $dir/ (owned by root)..."
+        sudo chown -R "$(id -u):$(id -g)" "$dir/"
+    fi
+done
+
 # Step 0: Check for .env file, offer to create from template
 echo "Step 0: Checking prerequisites..."
 

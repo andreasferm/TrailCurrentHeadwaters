@@ -115,6 +115,15 @@ async function seedDatabase() {
         if (existingConfig.cloud_api_key_iv === undefined) {
             updates.cloud_api_key_iv = '';
         }
+        if (existingConfig.alarm_enabled === undefined) {
+            updates.alarm_enabled = false;
+        }
+        if (existingConfig.sms_max_messages === undefined) {
+            updates.sms_max_messages = 3;
+        }
+        if (existingConfig.sms_throttle_window_minutes === undefined) {
+            updates.sms_throttle_window_minutes = 60;
+        }
         if (Object.keys(updates).length > 0) {
             await systemConfig.updateOne(
                 { _id: 'main' },

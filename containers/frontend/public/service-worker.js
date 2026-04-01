@@ -93,40 +93,27 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    // Network-first strategy: try the network, fall back to cache when offline
     event.respondWith(
-        caches.match(request)
-            .then((cachedResponse) => {
-                if (cachedResponse) {
-                    // Return cached version and update cache in background
-                    event.waitUntil(
-                        fetch(request)
-                            .then((networkResponse) => {
-                                if (networkResponse.ok) {
-                                    caches.open(CACHE_NAME)
-                                        .then((cache) => cache.put(request, networkResponse));
-                                }
-                            })
-                            .catch(() => {})
-                    );
-                    return cachedResponse;
+        fetch(request)
+            .then((networkResponse) => {
+                if (networkResponse.ok) {
+                    const responseToCache = networkResponse.clone();
+                    caches.open(CACHE_NAME)
+                        .then((cache) => cache.put(request, responseToCache));
                 }
-
-                // Not in cache - fetch from network
-                return fetch(request)
-                    .then((networkResponse) => {
-                        if (networkResponse.ok) {
-                            const responseToCache = networkResponse.clone();
-                            caches.open(CACHE_NAME)
-                                .then((cache) => cache.put(request, responseToCache));
+                return networkResponse;
+            })
+            .catch(() => {
+                return caches.match(request)
+                    .then((cachedResponse) => {
+                        if (cachedResponse) {
+                            return cachedResponse;
                         }
-                        return networkResponse;
-                    })
-                    .catch(() => {
                         // Offline fallback for navigation requests
                         if (request.mode === 'navigate') {
                             return caches.match('/index.html');
                         }
-                        // Return a proper error response instead of undefined
                         return new Response('Network error', {
                             status: 408,
                             headers: { 'Content-Type': 'text/plain' }

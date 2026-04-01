@@ -52,6 +52,9 @@ class MqttService {
         this.broadcast = null;
         this.connected = false;
         this.relayNameCache = {};  // lightId → name, refreshed on sync
+        this.lightStateCache = {};  // lightId → last known state from CAN bus
+        // Global SMS throttle — sliding window of recent send timestamps
+        this.smsSentTimestamps = [];
     }
 
     connect(db, broadcast) {
@@ -316,6 +319,17 @@ class MqttService {
             }
             this.broadcast('light', lightData);
         }
+
+        // Check for state change and send alarm SMS if needed
+        const prevState = this.lightStateCache[lightId];
+        const newState = payload.state;
+        this.lightStateCache[lightId] = newState;
+        if (prevState === undefined) {
+            console.log(`[Alarm] Light ${lightId} initial state cached: ${newState}`);
+        } else if (prevState !== newState) {
+            console.log(`[Alarm] Light ${lightId} state changed: ${prevState} -> ${newState}`);
+            this.sendAlarmNotification('light');
+        }
     }
 
     // Handle relay status update from Switchback module
@@ -331,6 +345,83 @@ class MqttService {
                 relayData.name = this.relayNameCache[lightId];
             }
             this.broadcast('light', relayData);
+        }
+
+        // Check for state change and send alarm SMS if needed
+        const prevState = this.lightStateCache[lightId];
+        const newState = payload.state;
+        this.lightStateCache[lightId] = newState;
+        if (prevState === undefined) {
+            console.log(`[Alarm] Relay ${lightId} initial state cached: ${newState}`);
+        } else if (prevState !== newState) {
+            console.log(`[Alarm] Relay ${lightId} state changed: ${prevState} -> ${newState}`);
+            this.sendAlarmNotification('relay');
+        }
+    }
+
+    // Send alarm SMS notification with global throttle.
+    // Throttle uses a sliding window: max N messages in Y minutes,
+    // configured via sms_max_messages and sms_throttle_window_minutes
+    // in system_config (defaults: 3 messages per 60 minutes).
+    async sendAlarmNotification(source) {
+        try {
+            const config = await this.db.collection('system_config').findOne({ _id: 'main' });
+            if (!config || !config.alarm_enabled || !config.sms_enabled) {
+                console.log(`[Alarm] ${source} skipped: alarm_enabled=${config?.alarm_enabled}, sms_enabled=${config?.sms_enabled}`);
+                return;
+            }
+
+            if (!config.sms_phone_number || !config.sms_router_ip) {
+                console.log(`[Alarm] ${source} skipped: missing sms_phone_number or sms_router_ip`);
+                return;
+            }
+            if (!config.sms_ssh_key_encrypted || !config.sms_ssh_key_iv) {
+                console.log(`[Alarm] ${source} skipped: missing SMS SSH key`);
+                return;
+            }
+
+            // Global sliding-window throttle
+            const maxMessages = config.sms_max_messages || 3;
+            const windowMs = (config.sms_throttle_window_minutes || 60) * 60000;
+            const now = Date.now();
+
+            // Prune timestamps outside the window
+            this.smsSentTimestamps = this.smsSentTimestamps.filter(t => now - t < windowMs);
+
+            if (this.smsSentTimestamps.length >= maxMessages) {
+                const oldest = this.smsSentTimestamps[0];
+                const resumeIn = Math.round((windowMs - (now - oldest)) / 1000);
+                console.log(`[Alarm] ${source} throttled: ${maxMessages} SMS already sent in window (${resumeIn}s until next slot)`);
+                return;
+            }
+
+            const { decrypt } = require('./utils/crypto.js');
+            const { executeRemoteSms } = require('./routes/sms');
+
+            let sshKey;
+            try {
+                sshKey = decrypt(config.sms_ssh_key_encrypted, config.sms_ssh_key_iv);
+            } catch {
+                console.error('[Alarm] Failed to decrypt SMS SSH key');
+                return;
+            }
+
+            let message;
+            if (config.cloud_enabled && config.cloud_url) {
+                message = `Unexpected event occurred, check Farwatch for details ${config.cloud_url}`;
+            } else {
+                message = 'Unexpected event occurred';
+            }
+
+            // Record send timestamp before dispatch
+            this.smsSentTimestamps.push(now);
+
+            console.log(`[Alarm] Sending SMS (${source}), ${this.smsSentTimestamps.length}/${maxMessages} in window`);
+            executeRemoteSms(config.sms_router_ip, sshKey, config.sms_phone_number, message)
+                .then(() => console.log(`[Alarm] SMS sent (${source})`))
+                .catch(err => console.error(`[Alarm] SMS failed (${source}):`, err.message));
+        } catch (err) {
+            console.error(`[Alarm] Error sending alarm notification (${source}):`, err.message);
         }
     }
 

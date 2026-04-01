@@ -86,7 +86,8 @@ cd "$RPIIG_DIR"
     -c trailcurrent-cm5-base.yaml \
     -- \
     IGconf_device_user1="$TC_USER" \
-    IGconf_device_user1passhash="$TC_PASSHASH"
+    IGconf_device_user1passhash="$TC_PASSHASH" \
+    IGconf_device_user1sudo=nopasswd
 
 IMG_PATH="$RPIIG_DIR/work/image-trailcurrent-cm5-base/trailcurrent-cm5-base.img"
 

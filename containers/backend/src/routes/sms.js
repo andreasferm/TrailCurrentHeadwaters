@@ -35,11 +35,12 @@ module.exports = (db) => {
     return router;
 };
 
-function executeRemoteSms(routerIp, sshKey, phoneNumber) {
+function executeRemoteSms(routerIp, sshKey, phoneNumber, message) {
     return new Promise((resolve, reject) => {
         const conn = new Client();
         let commandOutput = '';
         let commandError = '';
+        const smsMessage = message || 'Notification test from TrailCurrent';
 
         const connectionTimeout = setTimeout(() => {
             conn.end();
@@ -49,7 +50,7 @@ function executeRemoteSms(routerIp, sshKey, phoneNumber) {
         conn.on('ready', () => {
             clearTimeout(connectionTimeout);
 
-            const cmd = `sendsms ${phoneNumber} 'Notification test from TrailCurrent' National`;
+            const cmd = `sendsms ${phoneNumber} '${smsMessage.replace(/'/g, "'\\''")}' National`;
 
             const commandTimeout = setTimeout(() => {
                 conn.end();

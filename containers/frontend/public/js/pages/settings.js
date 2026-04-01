@@ -108,7 +108,7 @@ export const settingsPage = {
                                 aria-pressed="${systemConfig?.sms_enabled || false}">
                         </button>
                     </div>
-                    <div id="sms-config-fields" class="${!systemConfig?.sms_enabled ? 'hidden' : ''}" style="display: ${!systemConfig?.sms_enabled ? 'none' : 'flex'}; flex-direction: column; gap: 12px;">
+                    <div id="sms-config-fields" class="sms-config-fields ${!systemConfig?.sms_enabled ? 'hidden' : ''}">
                         <div class="password-form-group">
                             <label class="password-label" for="settings-sms-phone">Phone Number</label>
                             <input type="tel" id="settings-sms-phone" class="password-input"
@@ -126,6 +126,19 @@ export const settingsPage = {
                             <textarea id="settings-sms-ssh-key" class="password-input sms-ssh-key-textarea"
                                       placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
                                       rows="6">${systemConfig?.sms_ssh_key || ''}</textarea>
+                        </div>
+                        <div class="sms-throttle-row">
+                            <div class="password-form-group sms-throttle-field">
+                                <label class="password-label" for="settings-sms-max-messages">Max messages</label>
+                                <input type="number" id="settings-sms-max-messages" class="password-input"
+                                       min="1" max="100" value="${systemConfig?.sms_max_messages || 3}">
+                            </div>
+                            <div class="sms-throttle-separator">per</div>
+                            <div class="password-form-group sms-throttle-field">
+                                <label class="password-label" for="settings-sms-throttle-window">Minutes</label>
+                                <input type="number" id="settings-sms-throttle-window" class="password-input"
+                                       min="1" max="1440" value="${systemConfig?.sms_throttle_window_minutes || 60}">
+                            </div>
                         </div>
                         <div id="sms-config-message" class="password-message hidden"></div>
                         <div class="sms-buttons">
@@ -288,7 +301,7 @@ export const settingsPage = {
                 smsEnabledToggle.setAttribute('aria-pressed', isEnabled);
                 const smsFields = document.getElementById('sms-config-fields');
                 if (smsFields) {
-                    smsFields.style.display = isEnabled ? 'flex' : 'none';
+                    smsFields.classList.toggle('hidden', !isEnabled);
                 }
             });
         }
@@ -353,28 +366,28 @@ export const settingsPage = {
                 `;
 
                 try {
-                    // Clear caches first
+                    // Tell any waiting service worker to activate immediately
+                    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+                    }
+
+                    // Clear all caches
                     if ('caches' in window) {
                         const cacheNames = await caches.keys();
-                        for (const cacheName of cacheNames) {
-                            await caches.delete(cacheName);
-                        }
+                        await Promise.all(cacheNames.map(name => caches.delete(name)));
                     }
 
-                    // Unregister service workers and wait for new registration
+                    // Unregister all service workers
                     if ('serviceWorker' in navigator) {
                         const registrations = await navigator.serviceWorker.getRegistrations();
-                        for (const registration of registrations) {
-                            await registration.unregister();
-                        }
+                        await Promise.all(registrations.map(r => r.unregister()));
                     }
 
-                    // Add a small delay to ensure unregistration is complete
-                    await new Promise(resolve => setTimeout(resolve, 500));
-
-                    // Force reload with cache-busting query parameter
-                    // Use location.href with timestamp to force fresh fetch from server
-                    window.location.href = window.location.pathname + '?' + new Date().getTime();
+                    // Wait for unregistration to take effect, then hard reload
+                    // The delay is needed in standalone PWA mode where unregister
+                    // is asynchronous and the old worker can still intercept fetches
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    window.location.replace(window.location.pathname);
                 } catch (error) {
                     console.error('Failed to refresh app:', error);
                     refreshBtn.disabled = false;
@@ -552,6 +565,8 @@ export const settingsPage = {
         const smsPhoneNumber = document.getElementById('settings-sms-phone').value.trim();
         const smsRouterIp = document.getElementById('settings-sms-router-ip').value.trim();
         const smsSshKey = document.getElementById('settings-sms-ssh-key').value;
+        const smsMaxMessages = parseInt(document.getElementById('settings-sms-max-messages').value) || 3;
+        const smsThrottleWindow = parseInt(document.getElementById('settings-sms-throttle-window').value) || 60;
 
         if (smsEnabled && !smsPhoneNumber) {
             this.showSmsConfigMessage('Please enter a phone number', 'error');
@@ -576,7 +591,9 @@ export const settingsPage = {
                 sms_enabled: smsEnabled,
                 sms_phone_number: smsPhoneNumber,
                 sms_router_ip: smsRouterIp,
-                sms_ssh_key: smsSshKey
+                sms_ssh_key: smsSshKey,
+                sms_max_messages: smsMaxMessages,
+                sms_throttle_window_minutes: smsThrottleWindow
             });
             this.showSmsConfigMessage('SMS settings saved successfully', 'success');
         } catch (error) {

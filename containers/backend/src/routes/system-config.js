@@ -24,10 +24,13 @@ module.exports = (db) => {
                     cloud_mqtt_password: '',
                     cloud_api_key: '',
                     cloud_rate_limit: 30,
+                    alarm_enabled: false,
                     sms_enabled: false,
                     sms_phone_number: '',
                     sms_router_ip: '',
                     sms_ssh_key: '',
+                    sms_max_messages: 3,
+                    sms_throttle_window_minutes: 60,
                     mcu_modules: [],
                     wifi_ssid: '',
                     wifi_password: '',
@@ -186,6 +189,13 @@ module.exports = (db) => {
                 cloudBridge.updateRateLimit(rate);
             }
 
+            if (req.body.alarm_enabled !== undefined) {
+                if (typeof req.body.alarm_enabled !== 'boolean') {
+                    return res.status(400).json({ error: 'alarm_enabled must be a boolean' });
+                }
+                updates.alarm_enabled = req.body.alarm_enabled;
+            }
+
             if (req.body.sms_enabled !== undefined) {
                 if (typeof req.body.sms_enabled !== 'boolean') {
                     return res.status(400).json({ error: 'sms_enabled must be a boolean' });
@@ -224,6 +234,22 @@ module.exports = (db) => {
                     updates.sms_ssh_key_encrypted = '';
                     updates.sms_ssh_key_iv = '';
                 }
+            }
+
+            if (req.body.sms_max_messages !== undefined) {
+                const val = parseInt(req.body.sms_max_messages);
+                if (isNaN(val) || val < 1 || val > 100) {
+                    return res.status(400).json({ error: 'sms_max_messages must be between 1 and 100' });
+                }
+                updates.sms_max_messages = val;
+            }
+
+            if (req.body.sms_throttle_window_minutes !== undefined) {
+                const val = parseInt(req.body.sms_throttle_window_minutes);
+                if (isNaN(val) || val < 1 || val > 1440) {
+                    return res.status(400).json({ error: 'sms_throttle_window_minutes must be between 1 and 1440' });
+                }
+                updates.sms_throttle_window_minutes = val;
             }
 
             if (mcu_modules !== undefined) {
@@ -487,11 +513,14 @@ module.exports = (db) => {
                 cloud_api_key_encrypted: '',
                 cloud_api_key_iv: '',
                 cloud_rate_limit: 30,
+                alarm_enabled: false,
                 sms_enabled: false,
                 sms_phone_number: '',
                 sms_router_ip: '',
                 sms_ssh_key_encrypted: '',
                 sms_ssh_key_iv: '',
+                sms_max_messages: 3,
+                sms_throttle_window_minutes: 60,
                 mcu_modules: [],
                 wifi_ssid: '',
                 wifi_password_encrypted: '',

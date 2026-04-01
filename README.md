@@ -221,6 +221,58 @@ When cloud synchronization is enabled in Settings, the backend connects a second
 - **Local to Cloud (Status):** Light status, air quality, GPS, energy, thermostat, leveling — each rate-limited (configurable, default 30 msgs/sec)
 - **Config sync:** System config snapshot published as retained message on cloud connect
 
+### SMS Notifications
+
+The system can send SMS text messages through a cellular router's `sendsms` command via SSH. This is configured in **Settings > SMS Notifications**:
+
+- **Phone Number** — Destination phone number (e.g., `+15551234567`)
+- **Router IP Address** — LAN IP of the cellular router
+- **SSH Private Key** — Private key for passwordless SSH as `root` to the router
+
+To set up SSH access to the router:
+
+```bash
+# Generate an SSH key (if you don't already have one)
+ssh-keygen -t ed25519
+
+# Copy the public key to the router
+ssh-copy-id root@<router-ip>
+```
+
+The private key (typically `~/.ssh/id_ed25519`) is pasted into the settings field and stored encrypted in the database. Use the **Send Test SMS** button to verify the configuration.
+
+### Alarm System
+
+The alarm feature provides SMS notifications when device state changes are detected. A toggle on the home screen enables/disables the alarm. When enabled, the system monitors CAN bus status messages and sends an SMS when a device's state changes.
+
+**How it works:**
+
+1. The MQTT service tracks the last known state of each device from CAN bus messages
+2. When a new status message reports a different state than the cached value, the alarm fires
+3. Notifications are grouped by device type, each with its own independent cooldown (default 60 seconds)
+4. Multiple state changes within the same group's cooldown window result in a single SMS
+
+**Alarm groups:**
+
+| Group | Source | Trigger |
+|-------|--------|---------|
+| `light` | PDM/Torrent light controllers | Light state change (on/off) |
+| `relay` | Switchback relay modules | Relay state change (on/off) |
+| `energy` | Energy monitor | (future) |
+| `airquality` | Air quality sensor | (future) |
+| `thermostat` | Thermostat | (future) |
+| `level` | Leveling system | (future) |
+| `gps` | GPS/GNSS | (future) |
+
+Groups are defined in `MqttService.ALARM_GROUPS` in `containers/backend/src/mqtt.js`. Each group can be configured with its own cooldown period, and the architecture supports per-group settings for whether every event or only the first event in a window should trigger an SMS.
+
+**SMS message content:**
+
+- If cloud is enabled: `Unexpected event occurred, check Farwatch for details <cloud_url>`
+- If cloud is not enabled: `Unexpected event occurred`
+
+**Requirements:** SMS must be configured and enabled in Settings for alarm notifications to be sent.
+
 ### Host-Side Services
 
 Python scripts running as systemd services on the host (outside Docker):
