@@ -2,6 +2,7 @@ const mqtt = require('mqtt');
 const fs = require('fs');
 const path = require('path');
 const tls = require('tls');
+const { readSystemStats } = require('./services/system-stats');
 
 // MQTT Topic Path Constants
 const MQTT_ROOT = 'local';
@@ -42,7 +43,8 @@ const TOPICS = {
     DISCOVERY_BROWSE_STOP: 'discovery/browse/stop',
     DISCOVERY_BROWSE_FOUND: 'discovery/browse/found',
     DISCOVERY_CONFIRM_REQUEST: 'discovery/confirm/request',
-    DISCOVERY_CONFIRM_RESPONSE: 'discovery/confirm/response'
+    DISCOVERY_CONFIRM_RESPONSE: 'discovery/confirm/response',
+    SYSTEM_STATS: `${MQTT_ROOT}/system/stats`
 };
 
 class MqttService {
@@ -94,6 +96,7 @@ class MqttService {
             console.log('Connected to MQTT broker');
             this.connected = true;
             this.subscribeToTopics();
+            this.startSystemStatsPublisher();
         });
 
         this.client.on('error', (error) => {
@@ -884,6 +887,19 @@ class MqttService {
         console.log(`Publishing system config snapshot to ${topic}`);
         this.client.publish(topic, JSON.stringify(snapshot), { qos: 1, retain: true });
         return true;
+    }
+
+    // Periodically read and publish compute-module system stats
+    startSystemStatsPublisher() {
+        const INTERVAL_MS = 10000;
+        setInterval(() => {
+            if (!this.connected) return;
+            const stats = readSystemStats();
+            this.client.publish(TOPICS.SYSTEM_STATS, JSON.stringify(stats), { qos: 0 });
+            if (this.broadcast) {
+                this.broadcast('system_stats', stats);
+            }
+        }, INTERVAL_MS);
     }
 
     // --- Discovery methods ---

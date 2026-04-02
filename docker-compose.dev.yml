@@ -16,6 +16,8 @@ services:
     # Mount source code for hot-reload with nodemon
     volumes:
       - ./containers/backend/src:/app/src
+      - /sys:/host/sys:ro
+      - /proc:/host/proc:ro
     # Use nodemon instead of plain node for auto-restart on file changes
     command:
       - npx

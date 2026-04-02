@@ -211,6 +211,11 @@ class API {
         });
     }
 
+    // System Stats (CPU temp, utilization, fan speed)
+    static async getSystemStats() {
+        return this.request('/system-stats');
+    }
+
     // System Configuration
     static async getSystemConfig() {
         return this.request('/system-config');

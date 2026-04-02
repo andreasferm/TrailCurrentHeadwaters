@@ -38,7 +38,8 @@ const LOCAL_TO_CLOUD = [
     { local: 'local/thermostat/status',      cloud: 'rv/thermostat/status' },
     { local: 'local/level/tilt',             cloud: 'rv/level/tilt' },
     { local: 'local/level/status',           cloud: 'rv/level/status' },
-    { local: 'local/config/pdm_channels',    cloud: 'rv/config/pdm_channels' }
+    { local: 'local/config/pdm_channels',    cloud: 'rv/config/pdm_channels' },
+    { local: 'local/system/stats',           cloud: 'rv/system/stats' }
 ];
 
 // System config sync — retained, QoS 1, hardcoded 5s rate limit

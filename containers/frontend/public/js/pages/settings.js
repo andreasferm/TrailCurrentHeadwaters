@@ -1,5 +1,5 @@
 // Settings page
-import { API } from '../api.js';
+import { API, wsClient } from '../api.js';
 
 let settings = null;
 let systemConfig = null;
@@ -22,6 +22,28 @@ export const settingsPage = {
         const user = API.getUser();
 
         return `
+            <!-- System Stats -->
+            <div class="card settings-item-vertical">
+                <div class="settings-item-header">
+                    <span class="settings-label">System</span>
+                    <p class="settings-description">Compute module health</p>
+                </div>
+                <div class="system-stats-grid" id="system-stats-grid">
+                    <div class="system-stat">
+                        <span class="system-stat-label">CPU Temp</span>
+                        <span class="system-stat-value" id="stat-cpu-temp">--</span>
+                    </div>
+                    <div class="system-stat">
+                        <span class="system-stat-label">CPU Usage</span>
+                        <span class="system-stat-value" id="stat-cpu-usage">--</span>
+                    </div>
+                    <div class="system-stat">
+                        <span class="system-stat-label">Fan Speed</span>
+                        <span class="system-stat-value" id="stat-fan-speed">--</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Theme Toggle -->
             <div class="card settings-item">
                 <div>
@@ -257,6 +279,7 @@ export const settingsPage = {
 
             document.getElementById('settings-container').innerHTML = this.renderSettings();
             this.setupListeners();
+            this.setupSystemStats();
         } catch (error) {
             console.error('Failed to fetch settings:', error);
             document.getElementById('settings-container').innerHTML = '<p style="color: var(--danger);">Failed to load settings</p>';
@@ -790,8 +813,35 @@ export const settingsPage = {
         }
     },
 
+    updateSystemStatsDisplay(stats) {
+        const tempEl = document.getElementById('stat-cpu-temp');
+        const cpuEl = document.getElementById('stat-cpu-usage');
+        const fanEl = document.getElementById('stat-fan-speed');
+        if (tempEl) tempEl.textContent = stats.cpu_temp_c !== null ? `${stats.cpu_temp_c.toFixed(1)}\u00B0C` : 'N/A';
+        if (cpuEl) cpuEl.textContent = stats.cpu_percent !== null ? `${stats.cpu_percent}%` : 'N/A';
+        if (fanEl) fanEl.textContent = stats.fan_percent !== null ? `${stats.fan_percent}%` : 'N/A';
+    },
+
+    async setupSystemStats() {
+        // Fetch initial snapshot via REST
+        try {
+            const stats = await API.getSystemStats();
+            this.updateSystemStatsDisplay(stats);
+        } catch {
+            // Non-critical — WebSocket will provide updates
+        }
+
+        // Listen for live updates via WebSocket
+        this._statsWsHandler = (stats) => this.updateSystemStatsDisplay(stats);
+        wsClient.on('system_stats', this._statsWsHandler);
+    },
+
     cleanup() {
         settings = null;
         systemConfig = null;
+        if (this._statsWsHandler) {
+            wsClient.off('system_stats', this._statsWsHandler);
+            this._statsWsHandler = null;
+        }
     }
 };
