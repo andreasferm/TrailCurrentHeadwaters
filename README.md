@@ -220,6 +220,7 @@ The backend includes a built-in CAN bridge service (`src/services/can-bridge.js`
 
 When cloud synchronization is enabled in Settings, the backend connects a second MQTT client to the cloud broker (`src/services/cloud-bridge.js`):
 - **Cloud to Local (Commands):** `rv/lights/N/command` triggers CAN toggle, `rv/thermostat/command` passes through to local
+- **Cloud to Local (Proximity):** `rv/proximity/event` and `rv/proximity/status` are forwarded to `local/proximity/*` and broadcast via WebSocket. These events are published by the Farwatch proximity engine when a registered phone enters or leaves a distance zone around the vehicle. The automation rules themselves execute on Farwatch (publishing light/relay commands via the existing `rv/lights/*/command` and `rv/relays/*/command` topics), so no rule processing happens on the vehicle. The forwarded events are available for future Overlook UI display.
 - **Local to Cloud (Status):** Light status, air quality, GPS, energy, thermostat, leveling — each rate-limited (configurable, default 30 msgs/sec)
 - **Config sync:** System config snapshot published as retained message on cloud connect
 
