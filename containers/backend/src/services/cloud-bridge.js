@@ -97,6 +97,8 @@ function setupCloudToLocal() {
     cloudClient.subscribe('rv/relays/+/command', { qos: 1 });
     cloudClient.subscribe('rv/relays/all/command', { qos: 1 });
     cloudClient.subscribe('rv/thermostat/command', { qos: 1 });
+    cloudClient.subscribe('rv/proximity/event', { qos: 1 });
+    cloudClient.subscribe('rv/proximity/status', { qos: 1 });
 
     cloudClient.on('message', (topic, message) => {
         try {
@@ -134,6 +136,10 @@ function setupCloudToLocal() {
             } else if (parts[1] === 'thermostat' && parts[2] === 'command') {
                 // Pass through to local thermostat
                 localClient.publish('local/thermostat/command', message, { qos: 1 });
+            } else if (parts[1] === 'proximity') {
+                // Pass through proximity events/status to local broker
+                const localTopic = topic.replace('rv/', 'local/');
+                localClient.publish(localTopic, message, { qos: 1 });
             }
         } catch (err) {
             console.error('[Cloud Bridge] Error handling cloud command:', err.message);

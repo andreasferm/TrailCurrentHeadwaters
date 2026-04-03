@@ -44,7 +44,9 @@ const TOPICS = {
     DISCOVERY_BROWSE_FOUND: 'discovery/browse/found',
     DISCOVERY_CONFIRM_REQUEST: 'discovery/confirm/request',
     DISCOVERY_CONFIRM_RESPONSE: 'discovery/confirm/response',
-    SYSTEM_STATS: `${MQTT_ROOT}/system/stats`
+    SYSTEM_STATS: `${MQTT_ROOT}/system/stats`,
+    PROXIMITY_EVENT: `${MQTT_ROOT}/proximity/event`,
+    PROXIMITY_STATUS: `${MQTT_ROOT}/proximity/status`
 };
 
 class MqttService {
@@ -241,6 +243,22 @@ class MqttService {
                 console.log('Subscribed to discovery confirm response topic');
             }
         });
+
+        // Subscribe to proximity events/status (bridged from Farwatch cloud)
+        this.client.subscribe(TOPICS.PROXIMITY_EVENT, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to proximity event:', err);
+            } else {
+                console.log('Subscribed to proximity event topic');
+            }
+        });
+        this.client.subscribe(TOPICS.PROXIMITY_STATUS, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to proximity status:', err);
+            } else {
+                console.log('Subscribed to proximity status topic');
+            }
+        });
     }
 
     handleMessage(topic, message) {
@@ -299,6 +317,10 @@ class MqttService {
                 this.handleLevelStatus(payload);
             } else if (parts[1] === 'config' && parts[2] === 'system_sync_trigger') {
                 this.handleConfigSyncTrigger();
+            } else if (parts[1] === 'proximity' && parts[2] === 'event') {
+                this.handleProximityEvent(payload);
+            } else if (parts[1] === 'proximity' && parts[2] === 'status') {
+                this.handleProximityStatus(payload);
             }
         } catch (error) {
             console.error('Error handling MQTT message:', error);
@@ -568,6 +590,21 @@ class MqttService {
     handleLevelStatus(payload) {
         if (this.broadcast) {
             this.broadcast('level_status', payload);
+        }
+    }
+
+    // Handle proximity event from Farwatch cloud (bridged via cloud-bridge)
+    handleProximityEvent(payload) {
+        console.log('[Proximity] Event received:', payload);
+        if (this.broadcast) {
+            this.broadcast('proximity_event', payload);
+        }
+    }
+
+    // Handle proximity status from Farwatch cloud
+    handleProximityStatus(payload) {
+        if (this.broadcast) {
+            this.broadcast('proximity_status', payload);
         }
     }
 
