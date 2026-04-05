@@ -329,7 +329,7 @@ export class MapDisplay {
             if (statusEl) {
                 let text = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
                 if (speed != null) {
-                    const speedMph = speed * 2.237;
+                    const speedMph = speed * 0.0115078;
                     text += ` <br /> ${speedMph.toFixed(0)} mph`;
                 } else {
                     text += ` <br /> - mph`;
