@@ -2,7 +2,9 @@
 
 // Cloud MQTT Bridge — replaces Node-RED cloud-workflow.
 // Manages a second MQTT client connecting to the cloud broker.
-// Bridges local↔cloud messages with per-topic rate limiting.
+// Bridges local↔cloud messages with change detection, tiered intervals,
+// and periodic heartbeat to minimize cellular data while keeping state
+// synchronized.
 
 const mqtt = require('mqtt');
 const canBridge = require('./can-bridge');
@@ -10,20 +12,99 @@ const canBridge = require('./can-bridge');
 let cloudClient = null;
 let localClient = null;
 let mqttServiceRef = null;
-let rateLimitMs = 1000 / 30; // default 30 msgs/sec → ~33ms per message
+let heartbeatTimer = null;
 const CONFIG_SYNC_RATE_MS = 5000;
 
-// Per-topic timestamp map for rate limiting
+// ── Change detection & heartbeat state ─────────────────────────────
+// lastReceived: always stores the latest payload from CAN bus, even if
+//   we didn't forward it. Used by heartbeat to republish fresh state.
+// lastSentJson: stores the JSON string we last actually published to
+//   the cloud. Used by change detection to avoid duplicate sends.
+const lastReceived = {};  // cloudTopic -> { json: string, receivedAt: number }
+const lastSentJson = {};  // cloudTopic -> string (JSON)
+
+// Per-topic timestamp map for interval-based rate limiting
 const lastSent = {};
 
+const HEARTBEAT_MS = 20000;
+
+// ── Bandwidth monitoring ───────────────────────────────────────────
+let statsWindow = { bytes: 0, msgs: 0, windowStart: Date.now() };
+const STATS_LOG_INTERVAL_MS = 60000;
+
+// ── Tier configuration ─────────────────────────────────────────────
+// interval:   minimum ms between sends (0 = no interval gate, send on change only)
+// changeOnly: if true, skip publish when payload is identical to last sent
+// thresholds: if set, bypass interval when values change significantly
+const TIERS = {
+    // Immediate — user-facing state, forward on change only
+    'rv/lights':              { interval: 0,     changeOnly: true },
+    'rv/relays':              { interval: 0,     changeOnly: true },
+    'rv/thermostat/status':   { interval: 0,     changeOnly: true },
+    // Standard — slow-changing, 5s interval with threshold bypass
+    'rv/energy/status':       { interval: 5000,  changeOnly: true, thresholds: 'energy' },
+    'rv/gps/latlon':          { interval: 5000,  changeOnly: true, thresholds: 'gps' },
+    // Slow — rarely changes when parked, 15s interval
+    'rv/gps/alt':             { interval: 15000, changeOnly: true },
+    'rv/gps/details':         { interval: 15000, changeOnly: true },
+    'rv/airquality/status':   { interval: 15000, changeOnly: true },
+    'rv/airquality/temphumid':{ interval: 15000, changeOnly: true },
+    'rv/level/tilt':          { interval: 15000, changeOnly: true },
+    'rv/level/status':        { interval: 15000, changeOnly: true },
+    // Background — diagnostic only
+    'rv/system/stats':        { interval: 30000, changeOnly: false },
+    // Config — retain, low frequency
+    'rv/config/pdm_channels': { interval: 5000,  changeOnly: true },
+};
+
+function getTier(cloudTopic) {
+    // Direct match first
+    if (TIERS[cloudTopic]) return TIERS[cloudTopic];
+    // Wildcard match for rv/lights/N/status and rv/relays/N/status
+    if (cloudTopic.startsWith('rv/lights/')) return TIERS['rv/lights'];
+    if (cloudTopic.startsWith('rv/relays/')) return TIERS['rv/relays'];
+    // Fallback: 5s interval with change detection
+    return { interval: 5000, changeOnly: true };
+}
+
+// ── Interval gate (reuses lastSent map) ────────────────────────────
+
 function shouldSend(topic, intervalMs) {
+    if (intervalMs <= 0) return true;
     const now = Date.now();
     if (now - (lastSent[topic] || 0) < intervalMs) return false;
     lastSent[topic] = now;
     return true;
 }
 
-// ── Local → Cloud status bridging (rate-limited) ────────────────────
+// ── Change detection ───────────────────────────────────────────────
+
+function hasChanged(cloudTopic, jsonStr) {
+    return lastSentJson[cloudTopic] !== jsonStr;
+}
+
+// ── Threshold-based bypass for Standard tier ───────────────────────
+
+function exceedsThreshold(type, cloudTopic, newJsonStr) {
+    const prevJson = lastSentJson[cloudTopic];
+    if (!prevJson) return true;
+    try {
+        const oldVal = JSON.parse(prevJson);
+        const newVal = JSON.parse(newJsonStr);
+        if (type === 'energy') {
+            if (oldVal.charge_type !== newVal.charge_type) return true;
+            if (Math.abs((oldVal.battery_voltage || 0) - (newVal.battery_voltage || 0)) > 0.5) return true;
+            if (Math.abs((oldVal.solar_watts || 0) - (newVal.solar_watts || 0)) > 50) return true;
+            if (Math.abs((oldVal.battery_percent || 0) - (newVal.battery_percent || 0)) > 2) return true;
+        } else if (type === 'gps') {
+            if (Math.abs((oldVal.latitude || 0) - (newVal.latitude || 0)) > 0.0005) return true;
+            if (Math.abs((oldVal.longitude || 0) - (newVal.longitude || 0)) > 0.0005) return true;
+        }
+    } catch (e) { return true; }
+    return false;
+}
+
+// ── Local → Cloud status bridging (change-detected, tiered) ────────
 
 const LOCAL_TO_CLOUD = [
     { local: 'local/lights/+/status',       cloudPrefix: 'rv/lights/',       cloudSuffix: '/status',    wildcard: true },
@@ -33,7 +114,6 @@ const LOCAL_TO_CLOUD = [
     { local: 'local/gps/latlon',             cloud: 'rv/gps/latlon' },
     { local: 'local/gps/alt',               cloud: 'rv/gps/alt' },
     { local: 'local/gps/details',            cloud: 'rv/gps/details' },
-    { local: 'local/gps/time',               cloud: 'rv/gps/time' },
     { local: 'local/energy/status',          cloud: 'rv/energy/status' },
     { local: 'local/thermostat/status',      cloud: 'rv/thermostat/status' },
     { local: 'local/level/tilt',             cloud: 'rv/level/tilt' },
@@ -45,6 +125,53 @@ const LOCAL_TO_CLOUD = [
 // System config sync — retained, QoS 1, hardcoded 5s rate limit
 const SYSTEM_SYNC = { local: 'local/config/system_sync', cloud: 'rv/config/system' };
 
+// ── Publish helper (tracks bandwidth stats) ────────────────────────
+
+function publishToCloud(cloudTopic, messageBuffer, opts, reason) {
+    cloudClient.publish(cloudTopic, messageBuffer, opts);
+    const size = typeof messageBuffer === 'string' ? messageBuffer.length : messageBuffer.length;
+    statsWindow.bytes += size + cloudTopic.length + 30; // approximate MQTT overhead
+    statsWindow.msgs += 1;
+}
+
+// ── Heartbeat — republish all last-known state periodically ────────
+// Bounds maximum desync to HEARTBEAT_MS. In normal operation, state
+// changes are forwarded immediately; the heartbeat is a safety net for
+// connection-level failures where QoS 1 retry couldn't complete.
+
+function publishHeartbeat() {
+    if (!cloudClient || !cloudClient.connected) return;
+    for (const [topic, entry] of Object.entries(lastReceived)) {
+        publishToCloud(topic, entry.json, { qos: 1 }, 'heartbeat');
+        lastSentJson[topic] = entry.json;
+    }
+}
+
+function startHeartbeat() {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(publishHeartbeat, HEARTBEAT_MS);
+}
+
+function stopHeartbeat() {
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
+}
+
+// ── Bandwidth stats logging ────────────────────────────────────────
+
+let statsTimer = null;
+
+function logStats() {
+    const elapsed = (Date.now() - statsWindow.windowStart) / 1000;
+    if (statsWindow.msgs > 0) {
+        const rate = (statsWindow.bytes / elapsed).toFixed(0);
+        console.log(`[Cloud Bridge] Last ${elapsed.toFixed(0)}s: ${statsWindow.msgs} msgs, ${statsWindow.bytes} bytes (~${rate} B/s)`);
+    }
+    statsWindow = { bytes: 0, msgs: 0, windowStart: Date.now() };
+}
+
 // Local broker message handler — attached exactly once in connect().
 // Must not be reattached on reconnect, or each message will be processed
 // multiple times (fine for rate-limited status, fatal for toggles).
@@ -54,27 +181,48 @@ function handleLocalMessage(topic, message) {
     // System config sync (retained, QoS 1, 5s rate limit)
     if (topic === SYSTEM_SYNC.local) {
         if (!shouldSend(SYSTEM_SYNC.cloud, CONFIG_SYNC_RATE_MS)) return;
-        cloudClient.publish(SYSTEM_SYNC.cloud, message, { qos: 1, retain: true });
+        publishToCloud(SYSTEM_SYNC.cloud, message, { qos: 1, retain: true }, 'config');
         return;
     }
 
     // Match against local→cloud mappings
     for (const mapping of LOCAL_TO_CLOUD) {
+        let cloudTopic = null;
+
         if (mapping.wildcard) {
-            // Pattern: local/lights/+/status → rv/lights/N/status
             const regex = new RegExp('^' + mapping.local.replace('+', '([^/]+)') + '$');
             const match = topic.match(regex);
             if (match) {
-                const cloudTopic = mapping.cloudPrefix + match[1] + mapping.cloudSuffix;
-                if (!shouldSend(cloudTopic, rateLimitMs)) return;
-                cloudClient.publish(cloudTopic, message, { qos: 1 });
-                return;
+                cloudTopic = mapping.cloudPrefix + match[1] + mapping.cloudSuffix;
             }
         } else if (topic === mapping.local) {
-            if (!shouldSend(mapping.cloud, rateLimitMs)) return;
-            cloudClient.publish(mapping.cloud, message, { qos: 1 });
-            return;
+            cloudTopic = mapping.cloud;
         }
+
+        if (!cloudTopic) continue;
+
+        const jsonStr = message.toString();
+        const tier = getTier(cloudTopic);
+
+        // Always store latest value for heartbeat, even if we don't send now
+        lastReceived[cloudTopic] = { json: jsonStr, receivedAt: Date.now() };
+
+        // Change detection: skip if payload is identical to last sent
+        if (tier.changeOnly && !hasChanged(cloudTopic, jsonStr)) return;
+
+        // Interval gate: check if enough time has passed
+        if (tier.interval > 0 && !shouldSend(cloudTopic, tier.interval)) {
+            // Threshold bypass: send immediately if values changed significantly
+            if (tier.thresholds && exceedsThreshold(tier.thresholds, cloudTopic, jsonStr)) {
+                lastSent[cloudTopic] = Date.now(); // reset interval timer
+            } else {
+                return;
+            }
+        }
+
+        publishToCloud(cloudTopic, message, { qos: 1 }, 'changed');
+        lastSentJson[cloudTopic] = jsonStr;
+        return;
     }
 }
 
@@ -201,6 +349,9 @@ function connect(mqttService, domain, username, password) {
             localClient.publish('local/config/system_sync_trigger',
                 JSON.stringify({ reason: 'cloud_reconnect' }), { qos: 1 });
         }
+        // Forced heartbeat: immediately publish all cached state to resync
+        publishHeartbeat();
+        startHeartbeat();
     });
 
     cloudClient.on('error', (err) => {
@@ -209,6 +360,7 @@ function connect(mqttService, domain, username, password) {
 
     cloudClient.on('close', () => {
         console.log('[Cloud Bridge] Cloud connection closed');
+        stopHeartbeat();
     });
 
     // Set up local→cloud bridging. The message listener is attached to
@@ -217,24 +369,30 @@ function connect(mqttService, domain, username, password) {
     localClient.removeListener('message', handleLocalMessage);
     localClient.on('message', handleLocalMessage);
     subscribeLocalToCloud();
+
+    // Start bandwidth stats logging
+    if (statsTimer) clearInterval(statsTimer);
+    statsTimer = setInterval(logStats, STATS_LOG_INTERVAL_MS);
 }
 
 function disconnect() {
+    stopHeartbeat();
+    if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
     if (cloudClient) {
         console.log('[Cloud Bridge] Disconnecting from cloud broker');
         cloudClient.end(true);
         cloudClient = null;
     }
-    // Clear rate limit state
-    for (const key of Object.keys(lastSent)) {
-        delete lastSent[key];
-    }
+    // Clear rate limit and change detection state
+    for (const key of Object.keys(lastSent)) delete lastSent[key];
+    for (const key of Object.keys(lastReceived)) delete lastReceived[key];
+    for (const key of Object.keys(lastSentJson)) delete lastSentJson[key];
 }
 
 function updateRateLimit(msgsPerSec) {
-    const clamped = Math.max(1, Math.min(100, msgsPerSec));
-    rateLimitMs = 1000 / clamped;
-    console.log(`[Cloud Bridge] Rate limit updated to ${clamped} msgs/sec (${rateLimitMs.toFixed(1)}ms interval)`);
+    // Legacy API — tiered intervals now control per-topic rates.
+    // Kept for backward compatibility with system-config callers.
+    console.log(`[Cloud Bridge] Rate limit setting ignored (using tiered intervals). Requested: ${msgsPerSec} msgs/sec`);
 }
 
 module.exports = { connect, disconnect, updateRateLimit };
