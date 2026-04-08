@@ -218,11 +218,15 @@ The backend includes a built-in CAN bridge service (`src/services/can-bridge.js`
 
 ### Cloud Bridge
 
-When cloud synchronization is enabled in Settings, the backend connects a second MQTT client to the cloud broker (`src/services/cloud-bridge.js`):
+When cloud synchronization is enabled in Settings, the backend connects a second MQTT client to the Farwatch cloud broker over cellular LTE (`src/services/cloud-bridge.js`):
+
 - **Cloud to Local (Commands):** `rv/lights/N/command` triggers CAN toggle, `rv/thermostat/command` passes through to local
 - **Cloud to Local (Proximity):** `rv/proximity/event` and `rv/proximity/status` are forwarded to `local/proximity/*` and broadcast via WebSocket. These events are published by the Farwatch proximity engine when a registered phone enters or leaves a distance zone around the vehicle. The automation rules themselves execute on Farwatch (publishing light/relay commands via the existing `rv/lights/*/command` and `rv/relays/*/command` topics), so no rule processing happens on the vehicle. The forwarded events are available for future Overlook UI display.
-- **Local to Cloud (Status):** Light status, air quality, GPS, energy, thermostat, leveling — each rate-limited (configurable, default 30 msgs/sec)
-- **Config sync:** System config snapshot published as retained message on cloud connect
+- **Local to Cloud (Status):** Forwarded using three data-saving mechanisms to stay within a 10 GB/month cellular budget:
+  - **Change detection** — Messages identical to the last-sent value are suppressed. Lights and relays (65% of raw CAN traffic) broadcast unchanged state every second; change detection eliminates ~99% of these.
+  - **Tiered intervals** — Each data type has a minimum send interval: immediate (lights, relays, thermostat — on change only), 5 seconds (energy, GPS position — with threshold bypass for significant changes), 15 seconds (altitude, air quality, leveling), 30 seconds (system stats). GPS time is not forwarded (Farwatch has its own clock).
+  - **Heartbeat** — Every 20 seconds, all last-known state is republished to the cloud as a safety net for connection-level failures. In normal operation, state changes are forwarded immediately via MQTT QoS 1.
+- **Config sync:** System config snapshot published as retained message on cloud connect, plus forced full-state heartbeat on reconnect
 
 ### SMS Notifications
 
