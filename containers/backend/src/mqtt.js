@@ -54,6 +54,7 @@ const TOPICS = {
     PROXIMITY_STATUS: `${MQTT_ROOT}/proximity/status`,
     WIRELESS_DISCOVERY_TRIGGER: 'local/discovery/trigger',
     WIRELESS_OTA_TRIGGER: 'local/ota/trigger',
+    CONFIG_REQUEST: 'local/config/request',
 };
 
 class MqttService {
@@ -125,6 +126,15 @@ class MqttService {
     }
 
     subscribeToTopics() {
+        // Subscribe to light command topics (for voice assistant / external control)
+        this.client.subscribe(TOPICS.LIGHT_COMMAND, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to light command:', err);
+            } else {
+                console.log('Subscribed to light command topics');
+            }
+        });
+
         // Subscribe to light status topics (for real light controller integration)
         this.client.subscribe(TOPICS.LIGHT_STATUS, (err) => {
             if (err) {
@@ -242,6 +252,15 @@ class MqttService {
             }
         });
 
+        // Subscribe to config request (voice assistant / local services requesting current config)
+        this.client.subscribe(TOPICS.CONFIG_REQUEST, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to config request:', err);
+            } else {
+                console.log('Subscribed to config request topic');
+            }
+        });
+
         // Subscribe to discovery browse results (from host-side mDNS browser)
         this.client.subscribe(TOPICS.DISCOVERY_BROWSE_FOUND, (err) => {
             if (err) {
@@ -344,6 +363,8 @@ class MqttService {
                 this.handleLevelStatus(payload);
             } else if (parts[1] === 'config' && parts[2] === 'system_sync_trigger') {
                 this.handleConfigSyncTrigger();
+            } else if (parts[1] === 'config' && parts[2] === 'request') {
+                this.handleConfigRequest();
             } else if (parts[1] === MQTT_DEPLOYMENT && parts[2] === MSG_STATUS) {
                 this.handleDeploymentStatus(payload);
             } else if (parts[1] === 'proximity' && parts[2] === 'event') {
@@ -383,6 +404,35 @@ class MqttService {
         } else if (prevState !== newState) {
             console.log(`[Alarm] Light ${lightId} state changed: ${prevState} -> ${newState}`);
             this.sendAlarmNotification('light');
+        }
+    }
+
+    // Handle light command from external source (e.g. voice assistant via MQTT)
+    async handleLightCommand(lightId, payload) {
+        console.log(`Received light command for light ${lightId}:`, payload);
+
+        if (!this.db) {
+            console.warn('DB not available, cannot route light command');
+            return;
+        }
+
+        try {
+            const light = await this.db.collection('lights').findOne({ _id: lightId });
+            if (!light) {
+                console.warn(`Light ${lightId} not found in DB, ignoring command`);
+                return;
+            }
+
+            if (light.source === 'switchback') {
+                // Switchback relays are toggle-only
+                this.publishRelayToggle(light.relay_channel, light.relay_instance);
+            } else {
+                // PDM light — send explicit state/brightness
+                const brightness = payload.brightness !== undefined ? payload.brightness : null;
+                this.publishLightCommand(lightId, payload.state, brightness);
+            }
+        } catch (err) {
+            console.error(`Error handling light command for light ${lightId}:`, err);
         }
     }
 
@@ -956,6 +1006,20 @@ class MqttService {
             }
         } catch (err) {
             console.error('[Config Sync] Failed to re-publish config snapshot:', err.message);
+        }
+    }
+
+    // Handle config request from local service (e.g. voice assistant startup)
+    // Re-publishes current PDM and relay channel configs as retained messages
+    async handleConfigRequest() {
+        console.log('[Config Request] Re-publishing PDM and relay channel configs');
+        try {
+            const { syncPdmChannelsToLights } = require('./services/pdm-channel-sync');
+            const { syncSwitchbackChannelsToLights } = require('./services/switchback-channel-sync');
+            await syncPdmChannelsToLights(this.db, this);
+            await syncSwitchbackChannelsToLights(this.db, this);
+        } catch (err) {
+            console.error('[Config Request] Failed to re-publish config:', err.message);
         }
     }
 
