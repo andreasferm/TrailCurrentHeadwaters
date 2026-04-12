@@ -14,6 +14,7 @@ const MQTT_GPS = 'gps';
 const MQTT_RELAYS = 'relays';
 const MQTT_LEVEL = 'level';
 const MQTT_WATER = 'water';
+const MQTT_DEPLOYMENT = 'deployment';
 
 // MQTT Message Types
 const MSG_COMMAND = 'command';
@@ -47,6 +48,8 @@ const TOPICS = {
     DISCOVERY_CONFIRM_REQUEST: 'discovery/confirm/request',
     DISCOVERY_CONFIRM_RESPONSE: 'discovery/confirm/response',
     SYSTEM_STATS: `${MQTT_ROOT}/system/stats`,
+    DEPLOYMENT_AVAILABLE: `${MQTT_ROOT}/${MQTT_DEPLOYMENT}/available`,
+    DEPLOYMENT_STATUS: `${MQTT_ROOT}/${MQTT_DEPLOYMENT}/${MSG_STATUS}`,
     PROXIMITY_EVENT: `${MQTT_ROOT}/proximity/event`,
     PROXIMITY_STATUS: `${MQTT_ROOT}/proximity/status`
 };
@@ -270,6 +273,15 @@ class MqttService {
                 console.log('Subscribed to proximity status topic');
             }
         });
+
+        // Subscribe to local deployment status topic (from deployment-watcher)
+        this.client.subscribe(TOPICS.DEPLOYMENT_STATUS, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to deployment status:', err);
+            } else {
+                console.log('Subscribed to deployment status topic');
+            }
+        });
     }
 
     handleMessage(topic, message) {
@@ -330,6 +342,8 @@ class MqttService {
                 this.handleLevelStatus(payload);
             } else if (parts[1] === 'config' && parts[2] === 'system_sync_trigger') {
                 this.handleConfigSyncTrigger();
+            } else if (parts[1] === MQTT_DEPLOYMENT && parts[2] === MSG_STATUS) {
+                this.handleDeploymentStatus(payload);
             } else if (parts[1] === 'proximity' && parts[2] === 'event') {
                 this.handleProximityEvent(payload);
             } else if (parts[1] === 'proximity' && parts[2] === 'status') {
@@ -627,6 +641,57 @@ class MqttService {
         if (this.broadcast) {
             this.broadcast('proximity_status', payload);
         }
+    }
+
+    // Handle deployment status from deployment-watcher (via local MQTT)
+    async handleDeploymentStatus(payload) {
+        const { deploymentId, status, version, progress } = payload;
+        if (!deploymentId || !status) return;
+
+        const validStatuses = ['downloading', 'downloaded', 'extracting', 'deploying', 'completed', 'failed'];
+        if (!validStatuses.includes(status)) return;
+
+        const isProgressUpdate = status === 'downloading' && typeof progress === 'number';
+
+        // Skip DB writes for intermediate progress updates to avoid flooding
+        if (!isProgressUpdate && this.db) {
+            try {
+                await this.db.collection('deployment_statuses').insertOne({
+                    deploymentId,
+                    status,
+                    version: version || 'unknown',
+                    timestamp: new Date(payload.timestamp || Date.now()),
+                    receivedAt: new Date()
+                });
+            } catch (err) {
+                console.error('Error saving deployment status:', err.message);
+            }
+        }
+
+        if (this.broadcast) {
+            const wsPayload = {
+                deploymentId,
+                status,
+                version: version || 'unknown',
+                timestamp: payload.timestamp || new Date().toISOString()
+            };
+            if (typeof progress === 'number') {
+                wsPayload.progress = progress;
+            }
+            this.broadcast('deployment_status', wsPayload);
+        }
+    }
+
+    // Publish local deployment available notification
+    publishLocalDeploymentAvailable(data) {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish local deployment available');
+            return false;
+        }
+        const topic = TOPICS.DEPLOYMENT_AVAILABLE;
+        console.log(`[Deployment] Publishing to ${topic}: ${data.filename}`);
+        this.client.publish(topic, JSON.stringify(data), { qos: 1 });
+        return true;
     }
 
     // Publish thermostat command

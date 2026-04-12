@@ -337,6 +337,15 @@ class API {
             body: JSON.stringify({ hostname })
         });
     }
+
+    // Deployments
+    static async getDeployments() {
+        return this.request('/deployments');
+    }
+
+    static async deleteDeployment(id) {
+        return this.request(`/deployments/${id}`, { method: 'DELETE' });
+    }
 }
 
 // WebSocket connection for real-time updates

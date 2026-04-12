@@ -24,6 +24,7 @@ const plateauRoutes = require('./routes/plateau');
 const smsRoutes = require('./routes/sms');
 const discoveryRoutes = require('./routes/discovery');
 const systemStatsRoutes = require('./routes/system-stats');
+const deploymentsRoutes = require('./routes/deployments');
 
 const app = express();
 const server = http.createServer(app);
@@ -72,6 +73,7 @@ async function startServer() {
         app.use('/api/sms', smsRoutes(db));
         app.use('/api/discovery', discoveryRoutes(db));
         app.use('/api/system-stats', systemStatsRoutes());
+        app.use('/api/deployments', deploymentsRoutes(db));
 
         // Error handling middleware
         app.use((err, req, res, next) => {

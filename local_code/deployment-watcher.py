@@ -73,6 +73,8 @@ if not MQTT_PASSWORD:
 
 # Topics
 LOCAL_CONFIG_TOPIC = 'local/config/cloud_updated'
+LOCAL_DEPLOYMENT_AVAILABLE = 'local/deployment/available'
+LOCAL_DEPLOYMENT_STATUS = 'local/deployment/status'
 CLOUD_DEPLOYMENT_TOPIC = 'rv/deployment/available'
 CLOUD_STATUS_TOPIC = 'rv/deployment/status'
 
@@ -131,6 +133,24 @@ def report_status(deployment_id, status, version='unknown', progress=None):
         log(f"Reported status '{status}'{f' ({progress}%)' if progress is not None else ''} for deployment {deployment_id}")
     except Exception as e:
         log(f"Failed to report status '{status}' (non-fatal): {e}")
+
+
+def report_local_status(deployment_id, status, version='unknown'):
+    """Report deployment status via local MQTT publish."""
+    if not local_mqtt_client:
+        log(f"Cannot report local status '{status}' - local MQTT not connected")
+        return
+    try:
+        msg = {
+            'deploymentId': deployment_id,
+            'status': status,
+            'version': version,
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        }
+        local_mqtt_client.publish(LOCAL_DEPLOYMENT_STATUS, json.dumps(msg), qos=1)
+        log(f"Published local status '{status}' for deployment {deployment_id}")
+    except Exception as e:
+        log(f"Failed to publish local status '{status}' (non-fatal): {e}")
 
 
 def get_backend_container():
@@ -526,6 +546,97 @@ def handle_deployment(payload):
         release_lock()
 
 
+def handle_local_deployment(payload):
+    """Handle a deployment notification from local MQTT (zip uploaded via PWA)."""
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError as e:
+        log(f"Invalid local deployment payload: {e}")
+        return
+
+    deployment_id = data.get('id')
+    version = data.get('version', 'unknown')
+    filename = data.get('filename')
+    sha256 = data.get('sha256')
+
+    if not deployment_id or not filename or not sha256:
+        log("Local deployment payload missing required fields (id, filename, sha256)")
+        return
+
+    log(f"Local deployment available: id={deployment_id} version={version} file={filename}")
+
+    # Check if already deployed
+    last_deployed = get_last_deployed_id()
+    if last_deployed == deployment_id:
+        log(f"Deployment {deployment_id} already applied, skipping")
+        return
+
+    # Check retry limit
+    attempts = failed_deployments.get(deployment_id, 0)
+    if attempts >= MAX_DEPLOY_ATTEMPTS:
+        log(f"Deployment {deployment_id} has failed {attempts} times, giving up")
+        return
+
+    # Acquire lock
+    if not acquire_lock():
+        log("Another deployment is in progress, skipping")
+        return
+
+    try:
+        # The zip is on the shared Docker volume at ~/data/deployments/{filename}
+        zip_path = os.path.join(HOME_DIR, 'data', 'deployments', filename)
+
+        if not os.path.isfile(zip_path):
+            log(f"Deployment zip not found at {zip_path}")
+            report_local_status(deployment_id, 'failed', version)
+            failed_deployments[deployment_id] = attempts + 1
+            return
+
+        # Verify SHA256
+        log(f"Verifying SHA256 of {zip_path}...")
+        file_hash = hashlib.sha256()
+        with open(zip_path, 'rb') as f:
+            while True:
+                chunk = f.read(65536)
+                if not chunk:
+                    break
+                file_hash.update(chunk)
+        computed = file_hash.hexdigest()
+        if computed != sha256:
+            log(f"CHECKSUM MISMATCH! Expected: {sha256}, Got: {computed}")
+            report_local_status(deployment_id, 'failed', version)
+            failed_deployments[deployment_id] = attempts + 1
+            return
+        log("Checksum verified OK")
+
+        report_local_status(deployment_id, 'extracting', version)
+
+        # Write pending marker
+        set_pending_deployment(deployment_id, version)
+
+        # Extract and deploy
+        report_local_status(deployment_id, 'deploying', version)
+        success = extract_and_deploy(zip_path)
+
+        # Note: deploy.sh restarts deployment-watcher at Step 6.1, so the
+        # code below typically never runs. The new watcher instance detects
+        # the pending file on startup and reports 'completed'.
+        if success:
+            failed_deployments.pop(deployment_id, None)
+            set_last_deployed_id(deployment_id)
+            clear_pending_deployment()
+            log(f"Local deployment {deployment_id} (v{version}) completed successfully")
+            report_local_status(deployment_id, 'completed', version)
+        else:
+            failed_deployments[deployment_id] = failed_deployments.get(deployment_id, 0) + 1
+            clear_pending_deployment()
+            log(f"Local deployment {deployment_id} (v{version}) failed during deploy.sh execution")
+            report_local_status(deployment_id, 'failed', version)
+
+    finally:
+        release_lock()
+
+
 # --- Cloud MQTT Client ---
 
 def connect_cloud_mqtt(config, _retry=False):
@@ -705,6 +816,8 @@ def setup_local_mqtt():
             log("Connected to local MQTT broker")
             client.subscribe(LOCAL_CONFIG_TOPIC, qos=1)
             log(f"Subscribed to {LOCAL_CONFIG_TOPIC}")
+            client.subscribe(LOCAL_DEPLOYMENT_AVAILABLE, qos=1)
+            log(f"Subscribed to {LOCAL_DEPLOYMENT_AVAILABLE}")
         else:
             log(f"Failed to connect to local MQTT: {reason_code}")
 
@@ -712,6 +825,13 @@ def setup_local_mqtt():
         if msg.topic == LOCAL_CONFIG_TOPIC:
             log("Cloud config changed notification received, refreshing...")
             refresh_cloud_connection()
+        elif msg.topic == LOCAL_DEPLOYMENT_AVAILABLE:
+            log("Local deployment notification received")
+            threading.Thread(
+                target=handle_local_deployment,
+                args=(msg.payload.decode('utf-8'),),
+                daemon=True
+            ).start()
 
     def on_disconnect(client, userdata, flags, reason_code, properties):
         if not shutting_down:
@@ -786,6 +906,7 @@ def main():
     # handle_deployment since last_deployed_id was already set above.
     if pending:
         report_status(dep_id, 'completed', dep_version)
+        report_local_status(dep_id, 'completed', dep_version)
         log(f"Reported 'completed' for deployment {dep_id} (v{dep_version})")
 
     # Step 4: Main loop - keep alive

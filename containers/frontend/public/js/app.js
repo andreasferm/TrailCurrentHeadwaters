@@ -12,6 +12,7 @@ import { loginPage } from './pages/login.js';
 import { mapPage } from './pages/map.js';
 import { wizardPage } from './pages/wizard.js';
 import { configPage } from './pages/config.js';
+import { deploymentsPage } from './pages/deployments.js';
 
 class App {
     constructor() {
@@ -100,6 +101,7 @@ class App {
             .register('airquality', airqualityPage)
             .register('map', mapPage)
             .register('config', configPage)
+            .register('deployments', deploymentsPage)
             .register('settings', settingsPage);
 
         // Initialize navigation
@@ -270,6 +272,14 @@ class App {
                     </svg>
                     <span>Config</span>
                 </button>
+                <button class="nav-btn nav-overflow-item" data-page="deployments">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                    </svg>
+                    <span>Deploy</span>
+                </button>
                 <button class="nav-btn nav-overflow-item" data-page="settings">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
@@ -320,6 +330,14 @@ class App {
                                 <line x1="17" y1="16" x2="23" y2="16"></line>
                             </svg>
                             <span>Config</span>
+                        </button>
+                        <button class="nav-overflow-btn" data-page="deployments">
+                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                            </svg>
+                            <span>Deploy</span>
                         </button>
                         <button class="nav-overflow-btn" data-page="settings">
                             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
