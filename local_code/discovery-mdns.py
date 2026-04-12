@@ -120,6 +120,7 @@ class TrailCurrentListener:
         addr = txt.get('addr', '0')
         canid = txt.get('canid', '0x00')
         fw = txt.get('fw', '0.0.0')
+        target = txt.get('target', '')  # e.g. "torrent" or "switchback" (Tapper only)
 
         # Avoid publishing duplicates within the same browse session
         global found_hostnames
@@ -134,6 +135,8 @@ class TrailCurrentListener:
             'canid': canid,
             'fw': fw
         }
+        if target:
+            payload['target'] = target
 
         print(f"[mDNS] Found module: {payload}")
         self.mqtt_pub(MQTT_TOPIC_FOUND, json.dumps(payload), qos=1)

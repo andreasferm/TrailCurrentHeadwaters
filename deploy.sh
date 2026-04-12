@@ -378,7 +378,7 @@ if [ "$FIRMWARE_INCLUDED" = "yes" ] && [ -f "local_code/trigger_ota_mqtt.py" ]; 
         MODULES=$(docker exec "$MONGODB_CONTAINER" mongosh --quiet --eval '
             const config = db.getSiblingDB("trailcurrent").system_config.findOne({_id: "main"});
             const modules = (config && config.mcu_modules) || [];
-            const enabled = modules.filter(m => m.enabled === true).map(m => ({hostname: m.hostname, type: m.type, name: m.name}));
+            const enabled = modules.filter(m => m.enabled === true).map(m => ({hostname: m.hostname, type: m.type, name: m.name, addr: m.addr, target: m.target || ""}));
             JSON.stringify(enabled);
         ' 2>/dev/null || echo "[]")
     fi
@@ -393,7 +393,22 @@ if [ "$FIRMWARE_INCLUDED" = "yes" ] && [ -f "local_code/trigger_ota_mqtt.py" ]; 
                 HOSTNAME=$(echo "$module" | jq -r '.hostname')
                 TYPE=$(echo "$module" | jq -r '.type')
                 NAME=$(echo "$module" | jq -r '.name')
-                FIRMWARE_PATH=$(find "firmware/wired/${TYPE}" -name "*.bin" 2>/dev/null | head -1)
+                ADDR=$(echo "$module" | jq -r '.addr // 0')
+                TARGET=$(echo "$module" | jq -r '.target // empty')
+
+                # Try target+address binary first (e.g. tapper_torrent_addr0.bin),
+                # then address-only (e.g. torrent_addr0.bin),
+                # then fall back to single binary
+                FIRMWARE_PATH=""
+                if [ -n "$TARGET" ]; then
+                    FIRMWARE_PATH="firmware/wired/${TYPE}/${TYPE}_${TARGET}_addr${ADDR}.bin"
+                fi
+                if [ -z "$FIRMWARE_PATH" ] || [ ! -f "$FIRMWARE_PATH" ]; then
+                    FIRMWARE_PATH="firmware/wired/${TYPE}/${TYPE}_addr${ADDR}.bin"
+                fi
+                if [ ! -f "$FIRMWARE_PATH" ]; then
+                    FIRMWARE_PATH=$(find "firmware/wired/${TYPE}" -name "*.bin" 2>/dev/null | head -1)
+                fi
 
                 if [ -n "$FIRMWARE_PATH" ] && [ -f "$FIRMWARE_PATH" ]; then
                     echo "  Deploying firmware to $NAME ($HOSTNAME)..."

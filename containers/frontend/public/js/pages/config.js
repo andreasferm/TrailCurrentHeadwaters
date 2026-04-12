@@ -420,8 +420,19 @@ export const configPage = {
             return;
         }
 
-        // Use the most recent firmware file (first in sorted list)
-        const firmwareFile = files[0].filename;
+        // Find the right firmware for this module's type, target, and address
+        const addr = module.addr !== undefined ? module.addr : 0;
+        const target = module.target || '';
+        const targetAddrName = target ? `${module.type}_${target}_addr${addr}.bin` : '';
+        const addrName = `${module.type}_addr${addr}.bin`;
+        const singleName = `${module.type}.bin`;
+
+        let firmwareMatch = targetAddrName ? files.find(f => f.filename === targetAddrName) : null;
+        if (!firmwareMatch) firmwareMatch = files.find(f => f.filename === addrName);
+        if (!firmwareMatch) firmwareMatch = files.find(f => f.filename === singleName);
+        if (!firmwareMatch) firmwareMatch = files[0]; // legacy fallback
+
+        const firmwareFile = firmwareMatch.filename;
 
         if (!confirm(`Update ${module.name} (${module.hostname}) with ${firmwareFile}?`)) return;
 

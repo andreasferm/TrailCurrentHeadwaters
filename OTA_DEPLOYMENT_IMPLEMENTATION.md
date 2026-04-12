@@ -101,10 +101,12 @@ $VENV_PATH/bin/pip install -q -r local_code/requirements.txt
 #### Step 7: Firmware Deployment
 ```
 for each enabled module with available firmware:
-  1. Trigger OTA mode via MQTT message
-  2. Wait 8-10 seconds for device to enter OTA
-  3. Push firmware via HTTP POST to device's /ota endpoint
-  4. Device reboots with new firmware
+  1. Look up module's type and addr from MongoDB
+  2. Select firmware: try {type}_addr{addr}.bin, fall back to {type}.bin
+  3. Trigger OTA mode via MQTT message
+  4. Wait 8-10 seconds for device to enter OTA
+  5. Push firmware via HTTP POST to device's /ota endpoint
+  6. Device reboots with new firmware
 ```
 
 #### deploy_firmware() Function
@@ -170,21 +172,36 @@ The `deploy.sh` script automatically:
 This allows Docker containers and host scripts to each use their appropriate MQTT broker address.
 
 ### Module Type to Firmware Mapping
-Firmware directories use module type names matching MCU_MODULES IDs:
+Firmware directories use module type names matching MCU_MODULES IDs. Multi-address modules (Torrent, Picket) store one binary per address:
 ```
 firmware/wired/
-├── aftline/firmware.bin
-├── ampline/firmware.bin
-├── bearing/firmware.bin
-├── borealis/firmware.bin
-├── milepost/firmware.bin
-├── picket/firmware.bin
-├── plateau/firmware.bin
-├── solstice/firmware.bin
-├── tapper/firmware.bin
-├── therma/firmware.bin
-└── torrent/firmware.bin
+├── aftline/aftline.bin
+├── ampline/ampline.bin
+├── bearing/bearing.bin
+├── borealis/borealis.bin
+├── milepost/milepost.bin
+├── picket/
+│   ├── picket_addr0.bin
+│   ├── picket_addr1.bin
+│   └── ... (up to picket_addr7.bin)
+├── plateau/plateau.bin
+├── solstice/solstice.bin
+├── tapper/tapper.bin
+├── therma/therma.bin
+└── torrent/
+    ├── torrent_addr0.bin
+    ├── torrent_addr1.bin
+    └── torrent_addr2.bin
 ```
+
+### Address-Aware Firmware Selection
+
+When deploying firmware OTA, `deploy.sh` selects the correct binary based on the module's `addr` field from MongoDB:
+
+1. Try address-specific: `firmware/wired/{type}/{type}_addr{addr}.bin`
+2. Fall back to single binary: `firmware/wired/{type}/{type}.bin`
+
+This ensures multi-address modules get the correct firmware while single-instance modules continue to work unchanged.
 
 ## Database Schema
 
@@ -195,12 +212,23 @@ Devices stored in MongoDB (`system_config.mcu_modules`):
   "mcu_modules": [
     {
       "hostname": "esp32-8F56D8",
-      "type": "power_control_module",
-      "name": "Kitchen Power Control",
+      "type": "torrent",
+      "name": "Torrent 00",
+      "addr": 0,
+      "enabled": true
+    },
+    {
+      "hostname": "esp32-E91EF8",
+      "type": "torrent",
+      "name": "Torrent 01",
+      "addr": 1,
       "enabled": true
     }
   ]
 }
+```
+
+The `addr` field determines which firmware binary is selected during OTA. For multi-address modules, `deploy.sh` resolves `{type}_addr{addr}.bin` (e.g., `torrent_addr1.bin`). Single-instance modules (addr 0 or unset) fall back to `{type}.bin`.
 ```
 
 ## Prerequisites for OTA Deployment
@@ -242,10 +270,10 @@ chmod +x deploy.sh
 Step 7: Deploying MCU firmware (if present)...
   Firmware directory found, querying enabled devices...
   Deploying firmware to enabled modules...
-  Triggering OTA mode for Kitchen Power Control (esp32-8F56D8)...
-  Waiting for esp32-8F56D8 to enter OTA mode...
-  Uploading firmware to esp32-8F56D8...
-  Successfully deployed firmware to Kitchen Power Control
+  Deploying firmware to Torrent 00 (esp32-8F56D8)...   # uses torrent_addr0.bin
+  Deploying firmware to Torrent 01 (esp32-E91EF8)...   # uses torrent_addr1.bin
+  Deploying firmware to Borealis (esp32-A1B2C3)...     # uses borealis.bin
+  Firmware deployment complete
 ```
 
 ## Error Handling

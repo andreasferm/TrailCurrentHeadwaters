@@ -132,6 +132,7 @@ module.exports = (db) => {
                 enabled: true,
                 config: {}
             };
+            if (found.target) newModule.target = found.target;
 
             // Add to mcu_modules array
             modules.push(newModule);
@@ -220,14 +221,16 @@ module.exports.addDiscoveredModule = function(moduleData) {
     // Avoid duplicates
     if (discoveredModules.some(m => m.hostname === moduleData.hostname)) return;
 
-    discoveredModules.push({
+    const entry = {
         hostname: moduleData.hostname,
         type: moduleData.type,
         addr: moduleData.addr,
         canid: moduleData.canid,
         fw: moduleData.fw,
         discovered_at: new Date().toISOString()
-    });
+    };
+    if (moduleData.target) entry.target = moduleData.target;
+    discoveredModules.push(entry);
 };
 
 /**

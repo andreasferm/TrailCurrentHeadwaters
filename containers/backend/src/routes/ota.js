@@ -6,13 +6,48 @@ const mqttService = require('../mqtt');
 const FIRMWARE_DIR = '/app/firmware';
 const OTA_WAIT_MS = 5000; // Wait for module to start HTTP server after CAN trigger
 
+/**
+ * Resolve the correct firmware file for a module type, address, and optional target.
+ * Resolution order:
+ *   1. {type}_{target}_addr{addr}.bin  (Tapper paired to a target device)
+ *   2. {type}_addr{addr}.bin           (multi-address module)
+ *   3. {type}.bin                      (single-instance module)
+ */
+function resolveFirmwareFile(type, addr, target) {
+    if (target && addr !== undefined && addr !== null) {
+        const targetFile = `${type}_${target}_addr${addr}.bin`;
+        if (fs.existsSync(path.join(FIRMWARE_DIR, targetFile))) {
+            return targetFile;
+        }
+    }
+    if (addr !== undefined && addr !== null) {
+        const addrFile = `${type}_addr${addr}.bin`;
+        if (fs.existsSync(path.join(FIRMWARE_DIR, addrFile))) {
+            return addrFile;
+        }
+    }
+    const singleFile = `${type}.bin`;
+    if (fs.existsSync(path.join(FIRMWARE_DIR, singleFile))) {
+        return singleFile;
+    }
+    return null;
+}
+
 module.exports = () => {
     const router = express.Router();
     // POST /api/ota/trigger - Trigger OTA update for a device
     // Sends CAN 0x00, waits for module to start HTTP server, then POSTs firmware
     router.post('/trigger', async (req, res) => {
         try {
-            const { hostname, firmware_file } = req.body;
+            let { hostname, firmware_file, type, addr, target } = req.body;
+
+            // Auto-resolve firmware file from type+addr+target if not explicitly provided
+            if (!firmware_file && type) {
+                firmware_file = resolveFirmwareFile(type, addr, target);
+                if (!firmware_file) {
+                    return res.status(404).json({ error: `No firmware found for type=${type} addr=${addr} target=${target}` });
+                }
+            }
 
             // Validate hostname format: esp32-XXXXXX where X are hex digits
             const hostnameRegex = /^esp32-([0-9A-Fa-f]{6})$/;

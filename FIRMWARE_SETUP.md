@@ -9,7 +9,7 @@ The deployment package system automatically fetches the latest firmware binaries
 - **Versioned firmware**: Each release is tagged and tracked in git history
 - **Selective deployment**: Only devices with releases get firmware included
 - **Decoupled updates**: Update MCU firmware independently from Pi deployment
-- **Single storage**: No firmware duplication despite multiple devices of same type
+- **Multi-address support**: Modules like Torrent and Picket produce multiple address-specific binaries per release
 
 ## Current Integration
 
@@ -20,16 +20,17 @@ The following MCU modules are configured for automatic firmware fetching:
 | Repository | Device Type | Directory |
 |---|---|---|
 | `TrailCurrentBorealis` | `borealis` | `firmware/wired/borealis/` |
-| `TrailCurrentPicket` | `picket` | `firmware/wired/picket/` |
+| `TrailCurrentPicket` | `picket` | `firmware/wired/picket/` (8 address variants) |
 | `TrailCurrentTapper` | `tapper` | `firmware/wired/tapper/` |
 | `TrailCurrentTherma` | `therma` | `firmware/wired/therma/` |
 | `TrailCurrentBearing` | `bearing` | `firmware/wired/bearing/` |
 | `TrailCurrentSolstice` | `solstice` | `firmware/wired/solstice/` |
-| `TrailCurrentTorrent` | `torrent` | `firmware/wired/torrent/` |
+| `TrailCurrentTorrent` | `torrent` | `firmware/wired/torrent/` (3 address variants) |
 | `TrailCurrentAftline` | `aftline` | `firmware/wired/aftline/` |
 | `TrailCurrentAmpline` | `ampline` | `firmware/wired/ampline/` |
 | `TrailCurrentPlateau` | `plateau` | `firmware/wired/plateau/` |
 | `TrailCurrentMilepost` | `milepost` | `firmware/wired/milepost/` |
+| `TrailCurrentSwitchback` | `switchback` | `firmware/wired/switchback/` (3 address variants) |
 
 ### Wireless Modules (Coming Soon - OTA via WebSocket)
 
@@ -70,6 +71,38 @@ The firmware binary is created at:
 
 **Note:** pioarduino projects use the custom ESP32 platform from `https://github.com/pioarduino/platform-espressif32/`, and each project has its own VSCode configuration to ensure correct tools are loaded.
 
+**Option C: ESP-IDF Modules (Torrent, Picket, etc.)**
+
+Some modules use ESP-IDF directly instead of PlatformIO:
+```bash
+source ~/esp/v5.5.2/esp-idf/export.sh
+cd TrailCurrentTorrent
+idf.py set-target esp32
+idf.py build
+```
+
+The firmware binary is created at `build/<project_name>.bin` (e.g., `build/torrent.bin`).
+
+### Multi-Address Modules
+
+Some modules support multiple instances on the same CAN bus. Each instance requires a separate firmware binary compiled with a unique address. These modules have a `build-all.sh` script that builds all variants:
+
+| Module | Addresses | Build Flag | Binaries |
+|--------|-----------|------------|----------|
+| Torrent | 0-2 (3 total) | `TORRENT_ADDRESS` | `torrent_addr0.bin`, `torrent_addr1.bin`, `torrent_addr2.bin` |
+| Switchback | 0-2 (3 total) | `SWITCHBACK_ADDRESS` | `switchback_addr0.bin`, `switchback_addr1.bin`, `switchback_addr2.bin` |
+| Picket | 0-7 (8 total) | `PICKET_ADDRESS` | `picket_addr0.bin` .. `picket_addr7.bin` |
+| Tapper | 2 targets x 3 addr (6 total) | `TARGET_DEVICE` + `DEVICE_INSTANCE` | `tapper_torrent_addr0.bin` .. `tapper_switchback_addr2.bin` |
+
+To build all variants:
+```bash
+cd TrailCurrentTorrent
+./build-all.sh
+# Produces: build/torrent_addr0.bin, torrent_addr1.bin, torrent_addr2.bin
+```
+
+All address-specific binaries must be uploaded as release assets. The deployment system (`fetch-firmware.sh`) downloads each one and `deploy.sh` selects the correct binary for each module based on its `addr` field in the database.
+
 ### 2. Rename the Firmware (Optional)
 
 If your project has a `rename_firmware.py` script (as configured in `platformio.ini`), it will automatically rename the firmware during build. For example:
@@ -92,7 +125,7 @@ Navigate to your GitHub repository or use the `gh` CLI:
 5. Add a changelog/description
 6. Click **Publish release**
 
-**Via gh CLI:**
+**Via gh CLI (single-binary module):**
 
 ```bash
 # Step 1: Commit your firmware changes (source code only)
@@ -114,6 +147,30 @@ gh release create v1.2.3 \
   --title "v1.2.3" \
   --notes "Firmware release v1.2.3"
 ```
+
+**Via gh CLI (multi-address module, e.g. Torrent):**
+
+```bash
+# Step 1: Build all address variants
+cd TrailCurrentTorrent
+./build-all.sh
+# Produces: build/torrent_addr0.bin, torrent_addr1.bin, torrent_addr2.bin
+
+# Step 2: Tag and push
+git tag -a v1.0.0 -m "Firmware release v1.0.0"
+git push origin v1.0.0
+
+# Step 3: Create release with ALL address binaries
+gh release create v1.0.0 \
+  build/torrent_addr0.bin \
+  build/torrent_addr1.bin \
+  build/torrent_addr2.bin \
+  --repo trailcurrentoss/TrailCurrentTorrent \
+  --title "v1.0.0" \
+  --notes "Firmware release v1.0.0"
+```
+
+All address variants must be uploaded as release assets. The naming convention `{type}_addr{N}.bin` is required — `fetch-firmware.sh` and the web installer both depend on it.
 
 **Important:** The firmware binary is **not committed to git** (it's in `.gitignore`). Instead:
 - The git tag marks the **source code version**
@@ -164,11 +221,14 @@ Step 2: Fetching MCU firmware from GitHub releases...
 ==========================================
 Fetching MCU Firmware from GitHub
 ==========================================
-Organization: TrailCurrent
+Organization: trailcurrentoss
 Target version: v1.0.0
 
 Checking TrailCurrentBorealis (v1.0.0)... Downloaded (268K)
-Checking TrailCurrentPicket (v1.0.0)... Downloaded (245K)
+Checking TrailCurrentTorrent (v1.0.0) [addresses 0-2]...
+  addr 0: Downloaded (860K)
+  addr 1: Downloaded (860K)
+  addr 2: Downloaded (860K)
 Checking TrailCurrentTapper (v1.0.0)... Downloaded (312K)
 Checking TrailCurrentTherma (v1.0.0)... Not found (skipping)
 
@@ -176,14 +236,16 @@ Checking TrailCurrentTherma (v1.0.0)... Not found (skipping)
 Firmware Fetch Summary
 ==========================================
 Version:    v1.0.0
-Downloaded: 3 device(s)
+Downloaded: 5 device(s)
 Skipped:    1 device(s) (no release at this version)
 Failed:     0 device(s)
 
 Firmware structure:
-  firmware/wired/borealis/firmware.bin
-  firmware/wired/picket/firmware.bin
-  firmware/wired/tapper/firmware.bin
+  firmware/wired/borealis/borealis.bin
+  firmware/wired/tapper/tapper.bin
+  firmware/wired/torrent/torrent_addr0.bin
+  firmware/wired/torrent/torrent_addr1.bin
+  firmware/wired/torrent/torrent_addr2.bin
 ```
 
 **Notes:**
