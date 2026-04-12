@@ -3,7 +3,7 @@ const router = express.Router();
 const { ObjectId } = require('mongodb');
 
 const MCU_MODULES = [
-    { id: 'fireside', name: 'Fireside' },
+    { id: 'fireside', name: 'Fireside', wireless: true },
     { id: 'spotter', name: 'Spotter' },
     { id: 'milepost', name: 'Milepost' },
     { id: 'solstice', name: 'Solstice' },

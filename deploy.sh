@@ -20,7 +20,7 @@ set -e
 VENV_PATH="$HOME/local_code/cantomqtt"
 LOCAL_CODE_DEST="$HOME/local_code"
 
-# Function to deploy firmware to a device via OTA
+# Function to deploy firmware to a wired device via OTA
 # Uses CAN trigger (via MQTT) then HTTP POST of the binary to the module's /ota endpoint
 deploy_firmware() {
     local hostname=$1
@@ -36,9 +36,45 @@ deploy_firmware() {
         return 1
     fi
 
-    # Step 2: Wait for device to enter OTA mode and start HTTP server
+    # Step 2: Wait for device to connect to WiFi and start HTTP server
     echo "  Waiting for $hostname to enter OTA mode..."
     sleep 8
+
+    # Step 3: POST firmware binary to the module's /ota endpoint
+    echo "  Uploading firmware to $hostname via HTTP..."
+    curl -sf -X POST "http://${hostname}.local/ota" \
+        --data-binary "@${firmware_path}" \
+        --connect-timeout 10 \
+        --max-time 180
+
+    if [ $? -eq 0 ]; then
+        echo "  Successfully deployed firmware to $device_name"
+        return 0
+    else
+        echo "  Failed to deploy firmware to $device_name"
+        return 1
+    fi
+}
+
+# Function to deploy firmware to a wireless device via OTA
+# Uses MQTT local/ota/trigger then HTTP POST (device is already on WiFi)
+deploy_firmware_wireless() {
+    local hostname=$1
+    local firmware_path=$2
+    local device_name=$3
+
+    # Step 1: Trigger OTA mode via MQTT (local/ota/trigger topic)
+    echo "  Triggering wireless OTA for $device_name ($hostname)..."
+    "$VENV_PATH/bin/python3" local_code/trigger_ota_wireless.py "$hostname"
+
+    if [ $? -ne 0 ]; then
+        echo "  Failed to send wireless OTA trigger to $hostname"
+        return 1
+    fi
+
+    # Step 2: Short wait — wireless device is already on the network
+    echo "  Waiting for $hostname to enter OTA mode..."
+    sleep 3
 
     # Step 3: POST firmware binary to the module's /ota endpoint
     echo "  Uploading firmware to $hostname via HTTP..."
@@ -378,7 +414,7 @@ if [ "$FIRMWARE_INCLUDED" = "yes" ] && [ -f "local_code/trigger_ota_mqtt.py" ]; 
         MODULES=$(docker exec "$MONGODB_CONTAINER" mongosh --quiet --eval '
             const config = db.getSiblingDB("trailcurrent").system_config.findOne({_id: "main"});
             const modules = (config && config.mcu_modules) || [];
-            const enabled = modules.filter(m => m.enabled === true).map(m => ({hostname: m.hostname, type: m.type, name: m.name, addr: m.addr, target: m.target || ""}));
+            const enabled = modules.filter(m => m.enabled === true).map(m => ({hostname: m.hostname, type: m.type, name: m.name, addr: m.addr, target: m.target || "", wireless: m.wireless === true}));
             JSON.stringify(enabled);
         ' 2>/dev/null || echo "[]")
     fi
@@ -395,26 +431,41 @@ if [ "$FIRMWARE_INCLUDED" = "yes" ] && [ -f "local_code/trigger_ota_mqtt.py" ]; 
                 NAME=$(echo "$module" | jq -r '.name')
                 ADDR=$(echo "$module" | jq -r '.addr // 0')
                 TARGET=$(echo "$module" | jq -r '.target // empty')
+                WIRELESS=$(echo "$module" | jq -r '.wireless // false')
 
-                # Try target+address binary first (e.g. tapper_torrent_addr0.bin),
-                # then address-only (e.g. torrent_addr0.bin),
-                # then fall back to single binary
                 FIRMWARE_PATH=""
-                if [ -n "$TARGET" ]; then
-                    FIRMWARE_PATH="firmware/wired/${TYPE}/${TYPE}_${TARGET}_addr${ADDR}.bin"
-                fi
-                if [ -z "$FIRMWARE_PATH" ] || [ ! -f "$FIRMWARE_PATH" ]; then
-                    FIRMWARE_PATH="firmware/wired/${TYPE}/${TYPE}_addr${ADDR}.bin"
-                fi
-                if [ ! -f "$FIRMWARE_PATH" ]; then
-                    FIRMWARE_PATH=$(find "firmware/wired/${TYPE}" -name "*.bin" 2>/dev/null | head -1)
-                fi
 
-                if [ -n "$FIRMWARE_PATH" ] && [ -f "$FIRMWARE_PATH" ]; then
-                    echo "  Deploying firmware to $NAME ($HOSTNAME)..."
-                    deploy_firmware "$HOSTNAME" "$FIRMWARE_PATH" "$NAME" || true
+                if [ "$WIRELESS" = "true" ]; then
+                    # Wireless devices use a flat single binary under firmware/wireless/<type>/
+                    FIRMWARE_PATH="firmware/wireless/${TYPE}/${TYPE}.bin"
+                    if [ ! -f "$FIRMWARE_PATH" ]; then
+                        FIRMWARE_PATH=$(find "firmware/wireless/${TYPE}" -name "*.bin" 2>/dev/null | head -1)
+                    fi
+
+                    if [ -n "$FIRMWARE_PATH" ] && [ -f "$FIRMWARE_PATH" ]; then
+                        echo "  Deploying wireless firmware to $NAME ($HOSTNAME)..."
+                        deploy_firmware_wireless "$HOSTNAME" "$FIRMWARE_PATH" "$NAME" || true
+                    else
+                        echo "  No wireless firmware found for $NAME (type: $TYPE), skipping..."
+                    fi
                 else
-                    echo "  No firmware found for $NAME (type: $TYPE), skipping..."
+                    # Wired devices: try target+address binary, then address-only, then single binary
+                    if [ -n "$TARGET" ]; then
+                        FIRMWARE_PATH="firmware/wired/${TYPE}/${TYPE}_${TARGET}_addr${ADDR}.bin"
+                    fi
+                    if [ -z "$FIRMWARE_PATH" ] || [ ! -f "$FIRMWARE_PATH" ]; then
+                        FIRMWARE_PATH="firmware/wired/${TYPE}/${TYPE}_addr${ADDR}.bin"
+                    fi
+                    if [ ! -f "$FIRMWARE_PATH" ]; then
+                        FIRMWARE_PATH=$(find "firmware/wired/${TYPE}" -name "*.bin" 2>/dev/null | head -1)
+                    fi
+
+                    if [ -n "$FIRMWARE_PATH" ] && [ -f "$FIRMWARE_PATH" ]; then
+                        echo "  Deploying firmware to $NAME ($HOSTNAME)..."
+                        deploy_firmware "$HOSTNAME" "$FIRMWARE_PATH" "$NAME" || true
+                    else
+                        echo "  No firmware found for $NAME (type: $TYPE), skipping..."
+                    fi
                 fi
             done
             echo "  Firmware deployment complete"

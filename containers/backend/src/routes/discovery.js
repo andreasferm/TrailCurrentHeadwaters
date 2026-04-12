@@ -6,6 +6,8 @@ const { syncPdmChannelsToLights } = require('../services/pdm-channel-sync.js');
 const { syncSwitchbackChannelsToLights } = require('../services/switchback-channel-sync.js');
 const { MCU_MODULES, VALID_MODULE_IDS } = require('./modules');
 
+const WIRELESS_MODULE_IDS = new Set(MCU_MODULES.filter(m => m.wireless).map(m => m.id));
+
 const MODULE_DISPLAY_NAMES = Object.fromEntries(MCU_MODULES.map(m => [m.id, m.name]));
 
 // Ephemeral discovery session state
@@ -62,6 +64,7 @@ module.exports = (db) => {
             }
 
             mqttService.publishDiscoveryTrigger();
+            mqttService.publishWirelessDiscoveryTrigger();
             mqttService.publishDiscoveryBrowseStart();
 
             res.json({ success: true, message: 'Discovery started' });
@@ -133,6 +136,7 @@ module.exports = (db) => {
                 config: {}
             };
             if (found.target) newModule.target = found.target;
+            if (WIRELESS_MODULE_IDS.has(found.type)) newModule.wireless = true;
 
             // Add to mcu_modules array
             modules.push(newModule);

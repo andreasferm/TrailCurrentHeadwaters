@@ -4,7 +4,8 @@ const path = require('path');
 const mqttService = require('../mqtt');
 
 const FIRMWARE_DIR = '/app/firmware';
-const OTA_WAIT_MS = 5000; // Wait for module to start HTTP server after CAN trigger
+const OTA_WAIT_MS = 5000;         // Wait for module to start HTTP server after CAN trigger
+const OTA_WAIT_WIRELESS_MS = 2000; // Wireless devices are already running — shorter wait
 
 /**
  * Resolve the correct firmware file for a module type, address, and optional target.
@@ -36,10 +37,11 @@ function resolveFirmwareFile(type, addr, target) {
 module.exports = () => {
     const router = express.Router();
     // POST /api/ota/trigger - Trigger OTA update for a device
-    // Sends CAN 0x00, waits for module to start HTTP server, then POSTs firmware
+    // Wired: sends CAN 0x00, waits, then POSTs firmware via HTTP
+    // Wireless: sends MQTT local/ota/trigger with hostname, waits, then POSTs firmware via HTTP
     router.post('/trigger', async (req, res) => {
         try {
-            let { hostname, firmware_file, type, addr, target } = req.body;
+            let { hostname, firmware_file, type, addr, target, wireless } = req.body;
 
             // Auto-resolve firmware file from type+addr+target if not explicitly provided
             if (!firmware_file && type) {
@@ -69,37 +71,59 @@ module.exports = () => {
                 return res.status(404).json({ error: `Firmware file not found: ${firmware_file}` });
             }
 
-            // Extract MAC bytes for CAN trigger
-            const macHex = match[1];
-            const macBytes = [];
-            for (let i = 0; i < 6; i += 2) {
-                macBytes.push(parseInt(macHex.substring(i, i + 2), 16));
-            }
-
-            // Send CAN 0x00 OTA trigger
-            const canData = [macBytes[0], macBytes[1], macBytes[2], 0x00, 0x00, 0x00, 0x00, 0x00];
-            const canSuccess = mqttService.publishCanMessage(0x0, canData);
-
-            if (!canSuccess) {
-                return res.status(503).json({ error: 'MQTT service not connected' });
-            }
-
-            // Respond immediately — firmware upload happens async
-            res.json({
-                success: true,
-                message: 'OTA triggered, firmware upload starting',
-                hostname: hostname,
-                firmware_file: firmware_file
-            });
-
-            // Broadcast OTA start to WebSocket clients
             const broadcast = req.app.get('broadcast');
-            if (broadcast) {
-                broadcast('ota_progress', { hostname, status: 'triggered', message: 'CAN trigger sent, waiting for module...' });
-            }
+            let triggerSuccess;
 
-            // Wait for module to enter OTA mode and start HTTP server
-            await new Promise(resolve => setTimeout(resolve, OTA_WAIT_MS));
+            if (wireless) {
+                // Wireless path: publish hostname to local/ota/trigger MQTT topic
+                triggerSuccess = mqttService.publishWirelessOtaTrigger(hostname);
+                if (!triggerSuccess) {
+                    return res.status(503).json({ error: 'MQTT service not connected' });
+                }
+
+                // Respond immediately — firmware upload happens async
+                res.json({
+                    success: true,
+                    message: 'OTA triggered, firmware upload starting',
+                    hostname: hostname,
+                    firmware_file: firmware_file
+                });
+
+                if (broadcast) {
+                    broadcast('ota_progress', { hostname, status: 'triggered', message: 'MQTT trigger sent, waiting for wireless device...' });
+                }
+
+                // Wireless devices are already on WiFi — shorter wait before upload
+                await new Promise(resolve => setTimeout(resolve, OTA_WAIT_WIRELESS_MS));
+            } else {
+                // Wired path: send CAN 0x00 trigger via MQTT → CAN bridge
+                const macHex = match[1];
+                const macBytes = [];
+                for (let i = 0; i < 6; i += 2) {
+                    macBytes.push(parseInt(macHex.substring(i, i + 2), 16));
+                }
+                const canData = [macBytes[0], macBytes[1], macBytes[2], 0x00, 0x00, 0x00, 0x00, 0x00];
+                triggerSuccess = mqttService.publishCanMessage(0x0, canData);
+
+                if (!triggerSuccess) {
+                    return res.status(503).json({ error: 'MQTT service not connected' });
+                }
+
+                // Respond immediately — firmware upload happens async
+                res.json({
+                    success: true,
+                    message: 'OTA triggered, firmware upload starting',
+                    hostname: hostname,
+                    firmware_file: firmware_file
+                });
+
+                if (broadcast) {
+                    broadcast('ota_progress', { hostname, status: 'triggered', message: 'CAN trigger sent, waiting for module...' });
+                }
+
+                // Wait for wired device to connect to WiFi and start HTTP server
+                await new Promise(resolve => setTimeout(resolve, OTA_WAIT_MS));
+            }
 
             // POST firmware binary to module
             try {

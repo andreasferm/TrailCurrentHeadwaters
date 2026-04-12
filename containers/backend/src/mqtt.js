@@ -51,7 +51,9 @@ const TOPICS = {
     DEPLOYMENT_AVAILABLE: `${MQTT_ROOT}/${MQTT_DEPLOYMENT}/available`,
     DEPLOYMENT_STATUS: `${MQTT_ROOT}/${MQTT_DEPLOYMENT}/${MSG_STATUS}`,
     PROXIMITY_EVENT: `${MQTT_ROOT}/proximity/event`,
-    PROXIMITY_STATUS: `${MQTT_ROOT}/proximity/status`
+    PROXIMITY_STATUS: `${MQTT_ROOT}/proximity/status`,
+    WIRELESS_DISCOVERY_TRIGGER: 'local/discovery/trigger',
+    WIRELESS_OTA_TRIGGER: 'local/ota/trigger',
 };
 
 class MqttService {
@@ -1101,6 +1103,28 @@ class MqttService {
         }
         console.log(`[Discovery] Requesting host-side confirm for ${hostname}`);
         this.client.publish(TOPICS.DISCOVERY_CONFIRM_REQUEST, JSON.stringify({ hostname }), { qos: 1 });
+        return true;
+    }
+
+    // Broadcast discovery trigger to all wireless MCUs (payload "*" = everyone responds)
+    publishWirelessDiscoveryTrigger() {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish wireless discovery trigger');
+            return false;
+        }
+        console.log('[Discovery] Broadcasting local/discovery/trigger to wireless devices');
+        this.client.publish(TOPICS.WIRELESS_DISCOVERY_TRIGGER, '*', { qos: 0 });
+        return true;
+    }
+
+    // Send targeted OTA trigger to a specific wireless MCU by hostname
+    publishWirelessOtaTrigger(hostname) {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish wireless OTA trigger');
+            return false;
+        }
+        console.log(`[OTA] Publishing local/ota/trigger for wireless device ${hostname}`);
+        this.client.publish(TOPICS.WIRELESS_OTA_TRIGGER, hostname, { qos: 0 });
         return true;
     }
 

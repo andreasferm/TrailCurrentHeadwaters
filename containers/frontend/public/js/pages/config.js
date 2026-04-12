@@ -443,7 +443,7 @@ export const configPage = {
         }
 
         try {
-            await API.triggerOta(module.hostname, firmwareFile);
+            await API.triggerOta(module.hostname, firmwareFile, module.wireless === true);
             // Progress updates will come via WebSocket
         } catch (error) {
             if (statusEl) {

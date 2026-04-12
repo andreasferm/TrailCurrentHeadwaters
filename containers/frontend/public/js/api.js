@@ -281,11 +281,11 @@ class API {
         });
     }
 
-    // OTA trigger
-    static async triggerOta(hostname, firmware_file) {
+    // OTA trigger — pass wireless:true for WiFi-connected MCUs (e.g. Fireside)
+    static async triggerOta(hostname, firmware_file, wireless = false) {
         return this.request('/ota/trigger', {
             method: 'POST',
-            body: JSON.stringify({ hostname, firmware_file })
+            body: JSON.stringify({ hostname, firmware_file, wireless })
         });
     }
 
