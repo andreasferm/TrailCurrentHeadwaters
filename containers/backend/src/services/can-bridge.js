@@ -204,6 +204,16 @@ const parsers = {
         }));
     },
 
+    // ── Water tank levels (0x03e) — Reservoir module ─────────────────
+    '0x03e': (data, mqtt) => {
+        const decoded = decodeBitArrays(data);
+        mqtt.publish('local/water/status', JSON.stringify({
+            fresh: decoded[0],
+            grey: decoded[1],
+            black: decoded[2]
+        }));
+    },
+
     // ── Plateau status (0x032) ─────────────────────────────────────
     '0x032': (data, mqtt) => {
         const decoded = decodeBitArrays(data);

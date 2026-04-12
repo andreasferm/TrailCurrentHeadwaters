@@ -49,6 +49,7 @@ const TIERS = {
     'rv/gps/details':         { interval: 15000, changeOnly: true },
     'rv/airquality/status':   { interval: 15000, changeOnly: true },
     'rv/airquality/temphumid':{ interval: 15000, changeOnly: true },
+    'rv/water/status':        { interval: 15000, changeOnly: true },
     'rv/level/tilt':          { interval: 15000, changeOnly: true },
     'rv/level/status':        { interval: 15000, changeOnly: true },
     // Background — diagnostic only
@@ -116,6 +117,7 @@ const LOCAL_TO_CLOUD = [
     { local: 'local/gps/details',            cloud: 'rv/gps/details' },
     { local: 'local/energy/status',          cloud: 'rv/energy/status' },
     { local: 'local/thermostat/status',      cloud: 'rv/thermostat/status' },
+    { local: 'local/water/status',            cloud: 'rv/water/status' },
     { local: 'local/level/tilt',             cloud: 'rv/level/tilt' },
     { local: 'local/level/status',           cloud: 'rv/level/status' },
     { local: 'local/config/pdm_channels',    cloud: 'rv/config/pdm_channels' },

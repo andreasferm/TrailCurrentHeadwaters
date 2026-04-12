@@ -13,6 +13,7 @@ const MQTT_AIRQUALITY = 'airquality';
 const MQTT_GPS = 'gps';
 const MQTT_RELAYS = 'relays';
 const MQTT_LEVEL = 'level';
+const MQTT_WATER = 'water';
 
 // MQTT Message Types
 const MSG_COMMAND = 'command';
@@ -34,6 +35,7 @@ const TOPICS = {
     GPS_GNSS_DETAILS: `${MQTT_ROOT}/${MQTT_GPS}/details`,
     GPS_TIME: `${MQTT_ROOT}/${MQTT_GPS}/time`,
     RELAY_STATUS: `${MQTT_ROOT}/${MQTT_RELAYS}/+/${MSG_STATUS}`,
+    WATER_STATUS: `${MQTT_ROOT}/${MQTT_WATER}/${MSG_STATUS}`,
     LEVEL_TILT: `${MQTT_ROOT}/${MQTT_LEVEL}/tilt`,
     LEVEL_STATUS: `${MQTT_ROOT}/${MQTT_LEVEL}/${MSG_STATUS}`,
     CLOUD_CONFIG_CHANGED: 'local/config/cloud_updated',
@@ -190,6 +192,15 @@ class MqttService {
             }
         });
 
+        // Subscribe to water tank status topic (Reservoir module)
+        this.client.subscribe(TOPICS.WATER_STATUS, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to water status:', err);
+            } else {
+                console.log('Subscribed to water status topic');
+            }
+        });
+
         // Subscribe to Plateau level tilt topic
         this.client.subscribe(TOPICS.LEVEL_TILT, (err) => {
             if (err) {
@@ -311,6 +322,8 @@ class MqttService {
                 this.handleGpsTime(payload);
             } else if (parts[1] === MQTT_THERMOSTAT && parts[2] === MSG_STATUS) {
                 this.handleThermostatStatus(payload);
+            } else if (parts[1] === MQTT_WATER && parts[2] === MSG_STATUS) {
+                this.handleWaterStatus(payload);
             } else if (parts[1] === MQTT_LEVEL && parts[2] === 'tilt') {
                 this.handleLevelTilt(payload);
             } else if (parts[1] === MQTT_LEVEL && parts[2] === MSG_STATUS) {
@@ -579,6 +592,14 @@ class MqttService {
 
     // Handle Plateau tilt data (CAN ID 0x30 decoded by CAN bridge)
     // Payload: { front_back, side_to_side, front_back_diff_mm, left_right_diff_mm }
+    // Handle water tank levels from Reservoir (CAN ID 0x3E decoded by CAN bridge)
+    // Payload: { fresh, grey, black } — each 0-100 %
+    handleWaterStatus(payload) {
+        if (this.broadcast) {
+            this.broadcast('water', payload);
+        }
+    }
+
     handleLevelTilt(payload) {
         if (this.broadcast) {
             this.broadcast('level', payload);
