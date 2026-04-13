@@ -36,6 +36,7 @@ const TOPICS = {
     GPS_GNSS_DETAILS: `${MQTT_ROOT}/${MQTT_GPS}/details`,
     GPS_TIME: `${MQTT_ROOT}/${MQTT_GPS}/time`,
     RELAY_STATUS: `${MQTT_ROOT}/${MQTT_RELAYS}/+/${MSG_STATUS}`,
+    RELAY_ALL_COMMAND: `${MQTT_ROOT}/${MQTT_RELAYS}/all/${MSG_COMMAND}`,
     WATER_STATUS: `${MQTT_ROOT}/${MQTT_WATER}/${MSG_STATUS}`,
     LEVEL_TILT: `${MQTT_ROOT}/${MQTT_LEVEL}/tilt`,
     LEVEL_STATUS: `${MQTT_ROOT}/${MQTT_LEVEL}/${MSG_STATUS}`,
@@ -150,6 +151,24 @@ class MqttService {
                 console.error('Failed to subscribe to relay status:', err);
             } else {
                 console.log('Subscribed to relay status topics');
+            }
+        });
+
+        // Subscribe to relay all-command topic (explicit set-all, not per-channel toggle)
+        this.client.subscribe(TOPICS.RELAY_ALL_COMMAND, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to relay all command:', err);
+            } else {
+                console.log('Subscribed to relay all command topic');
+            }
+        });
+
+        // Subscribe to thermostat status topic
+        this.client.subscribe(TOPICS.THERMOSTAT_STATUS, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to thermostat status:', err);
+            } else {
+                console.log('Subscribed to thermostat status topic');
             }
         });
 
@@ -324,20 +343,26 @@ class MqttService {
             if (parts[0] !== MQTT_ROOT) return;
 
             if (parts[1] === MQTT_RELAYS) {
-                const relayId = parseInt(parts[2]);
                 const messageType = parts[3];
-
-                if (messageType === MSG_STATUS) {
-                    this.handleRelayStatus(relayId, payload);
+                if (parts[2] === 'all' && messageType === MSG_COMMAND) {
+                    this.handleAllRelaysCommand(payload);
+                } else {
+                    const relayId = parseInt(parts[2]);
+                    if (messageType === MSG_STATUS) {
+                        this.handleRelayStatus(relayId, payload);
+                    }
                 }
             } else if (parts[1] === MQTT_LIGHTS) {
-                const lightId = parseInt(parts[2]);
                 const messageType = parts[3];
-
-                if (messageType === MSG_COMMAND) {
-                    this.handleLightCommand(lightId, payload);
-                } else if (messageType === MSG_STATUS) {
-                    this.handleLightStatus(lightId, payload);
+                if (parts[2] === 'all' && messageType === MSG_COMMAND) {
+                    this.handleAllLightsCommand(payload);
+                } else {
+                    const lightId = parseInt(parts[2]);
+                    if (messageType === MSG_COMMAND) {
+                        this.handleLightCommand(lightId, payload);
+                    } else if (messageType === MSG_STATUS) {
+                        this.handleLightStatus(lightId, payload);
+                    }
                 }
             } else if (parts[1] === MQTT_ENERGY && parts[2] === MSG_STATUS) {
                 this.handleEnergyStatus(payload);
@@ -433,6 +458,51 @@ class MqttService {
             }
         } catch (err) {
             console.error(`Error handling light command for light ${lightId}:`, err);
+        }
+    }
+
+    // Handle all-lights command — sends explicit set-all CAN bytes to every PDM and
+    // Switchback instance. Uses [8, state] which the firmware treats as SET ALL, not
+    // a per-channel toggle. Mirrors the logic in PUT /api/lights/all.
+    async handleAllLightsCommand(payload) {
+        const state = payload.state ? 1 : 0;
+        console.log(`[All Lights] Received all-lights command: state=${state}`);
+        if (!this.db) {
+            console.warn('[All Lights] DB not available, cannot send all-lights command');
+            return;
+        }
+        try {
+            // Send explicit set-all to each Torrent (PDM) instance: CAN 0x18+instance, [8, state]
+            const pdmLights = await this.db.collection('lights').find({ source: { $exists: false } }).toArray();
+            const pdmInstances = [...new Set(pdmLights.map(l => Math.floor((l._id - 1) / 8)))];
+            for (const instance of pdmInstances) {
+                this.publishCanMessage(0x18 + instance, [8, state]);
+            }
+            // Send explicit set-all to each Switchback instance
+            const sbInstances = await this.db.collection('lights').distinct('relay_instance', { source: 'switchback' });
+            for (const instance of sbInstances) {
+                this.publishRelayAllCommand(state, instance);
+            }
+        } catch (err) {
+            console.error('[All Lights] Error handling all-lights command:', err);
+        }
+    }
+
+    // Handle all-relays command — sends explicit set-all to every Switchback instance.
+    async handleAllRelaysCommand(payload) {
+        const state = payload.state ? 1 : 0;
+        console.log(`[All Relays] Received all-relays command: state=${state}`);
+        if (!this.db) {
+            console.warn('[All Relays] DB not available, cannot send all-relays command');
+            return;
+        }
+        try {
+            const sbInstances = await this.db.collection('lights').distinct('relay_instance', { source: 'switchback' });
+            for (const instance of sbInstances) {
+                this.publishRelayAllCommand(state, instance);
+            }
+        } catch (err) {
+            console.error('[All Relays] Error handling all-relays command:', err);
         }
     }
 
