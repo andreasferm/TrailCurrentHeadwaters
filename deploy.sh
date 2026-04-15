@@ -228,6 +228,10 @@ echo ""
 echo "Step 4: Starting Docker services..."
 # --no-build: use pre-loaded images, don't try to build from source
 # --remove-orphans: clean up containers from services removed in newer versions
+# Pre-create all Docker bind-mount directories as the current user before Docker
+# starts. If Docker creates them first it does so as root, causing permission
+# denied errors when the deploy script or backend tries to write into them.
+mkdir -p data/keys data/tileserver data/firmware data/deployments
 docker compose up -d --no-build --remove-orphans
 
 # Step 5: Ensure local_code is deployed to the user's home directory
@@ -398,7 +402,6 @@ FIRMWARE_INCLUDED=$(cat .firmware-included 2>/dev/null)
 if [ "$FIRMWARE_INCLUDED" = "yes" ] && [ -f "local_code/trigger_ota_mqtt.py" ]; then
     # Copy firmware files to data/firmware so the backend can serve them for UI-triggered OTA
     if [ -d "firmware" ]; then
-        mkdir -p data/firmware
         find firmware -name "*.bin" -exec cp {} data/firmware/ \;
         echo "  Copied firmware files to data/firmware/ for UI access"
     fi
