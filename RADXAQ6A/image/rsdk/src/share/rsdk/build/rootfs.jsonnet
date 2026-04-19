@@ -578,7 +578,7 @@ function(
             //   pin 22 INT  → GPIO_57 (MCP2515 interrupt)
             //   8 MHz external crystal on the HAT
             //
-            // The overlay source (qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-8mhz.dts)
+            // The overlay source (qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-12mhz.dts)
             // is vendored at RADXAQ6A/image/overlays/ and compiled on the build
             // host by build.sh into $STAGING/files/dtbo/*.dtbo BEFORE this hook
             // runs. That means this hook just copies the pre-built dtbo into the
@@ -596,7 +596,7 @@ function(
                 echo "[hook 19b] enabling MCP2515 SPI CAN overlay (Waveshare RS485 CAN HAT)"
 
                 STAGING="${HEADWATERS_STAGING:-/tmp/headwaters-staging}"
-                OVR_NAME="qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-8mhz.dtbo"
+                OVR_NAME="qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-12mhz.dtbo"
                 OVR_SRC="$STAGING/files/dtbo/$OVR_NAME"
                 if [ ! -f "$OVR_SRC" ]; then
                     echo "  ERROR: $OVR_NAME missing from staging at $OVR_SRC" >&2
@@ -799,7 +799,7 @@ function(
                 fi
 
                 # Verify MCP2515 SPI CAN overlay is enabled in the systemd-boot entry
-                CAN_OVR="qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-8mhz.dtbo"
+                CAN_OVR="qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-12mhz.dtbo"
                 if ls "$1"/boot/efi/*/[0-9]*/dtbo/"$CAN_OVR" 1>/dev/null 2>&1; then
                     echo "  ✓ MCP2515 overlay staged in /boot/efi/<token>/<kver>/dtbo/"
                 else

@@ -138,7 +138,7 @@ Pin map on the Q6A's 40-pin header for the HAT:
 | 22 | INT (GPIO25 on RPi) | **`GPIO_57`** | MCP2515 interrupt |
 
 The overlay source is **vendored in this repo** at
-[`image/overlays/qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-8mhz.dts`](image/overlays/qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-8mhz.dts)
+[`image/overlays/qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-12mhz.dts`](image/overlays/qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-12mhz.dts)
 — a 60-line DTS derived from Radxa's upstream DTSO with the two `#include`
 directives and the `IRQ_TYPE_EDGE_FALLING` macro inlined as a literal so
 the file compiles with plain `dtc -@`, no cpp preprocessing, no kernel

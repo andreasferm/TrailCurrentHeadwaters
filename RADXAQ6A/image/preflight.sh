@@ -162,7 +162,7 @@ fi
 # ── 5. Device-tree overlay sources ──────────────────────────────────────────
 step "5. Vendored device-tree overlays (compiled on build host)"
 
-CAN_DTS="$SCRIPT_DIR/overlays/qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-8mhz.dts"
+CAN_DTS="$SCRIPT_DIR/overlays/qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-12mhz.dts"
 if [ -f "$CAN_DTS" ]; then
     ok "MCP2515 CAN overlay source present"
     # Also sanity-check that it compiles — catches syntax errors before build
