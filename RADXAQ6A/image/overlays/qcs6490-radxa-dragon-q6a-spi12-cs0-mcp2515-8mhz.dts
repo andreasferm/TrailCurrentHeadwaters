@@ -1,0 +1,80 @@
+// SPDX-License-Identifier: BSD-3-Clause
+//
+// Enable MCP2515 SPI CAN controller on SPI12 CS0 with 8 MHz external clock.
+// Target: Radxa Dragon Q6A (QCS6490) + Waveshare RS485 CAN HAT.
+//
+// 40-pin header mapping:
+//   pin 19 MOSI → GPIO_49 (SPI12_MOSI)
+//   pin 21 MISO → GPIO_48 (SPI12_MISO)
+//   pin 23 SCLK → GPIO_50 (SPI12_SCLK)
+//   pin 24 CE0  → GPIO_51 (SPI12_CS_0)
+//   pin 22 INT  → GPIO_57 (MCP2515 interrupt, falling edge)
+//
+// Source: github.com/radxa-pkg/radxa-overlays at
+//   arch/arm64/boot/dts/qcom/overlays/qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-8mhz.dtso
+//
+// Vendored here (rather than relying on the radxa-overlays-dkms package) so
+// that the image build is deterministic and does not require a DKMS build
+// inside the qemu chroot. The two #include directives and the
+// IRQ_TYPE_EDGE_FALLING macro from the upstream .dtso are inlined below as
+// literal integers so this file compiles with plain `dtc -@` and no cpp pass.
+//
+// Inline constants (from <dt-bindings/interrupt-controller/irq.h>):
+//   IRQ_TYPE_EDGE_FALLING = 2
+// <dt-bindings/gpio/gpio.h> was included upstream but none of its macros
+// are actually referenced in this overlay, so it is omitted here.
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	metadata {
+		title = "Enable MCP2515 with 8MHz external clock on SPI12 over CS0";
+		compatible = "radxa,dragon-q6a";
+		category = "misc";
+		exclusive = "spi12", "uart12", "i2c12", "gpio48", "gpio49", "gpio50", "gpio51", "GPIO_57";
+		description = "Enable MCP2515 with 8MHz external clock on SPI12 over CS0.
+
+Provide support for Microchip MCP2515 SPI CAN controller.
+Assumes 8MHz external clock.
+Uses Pin 22 (GPIO_57) for INT.";
+	};
+};
+
+&i2c12 {
+	status = "disabled";
+};
+
+&uart12 {
+	status = "disabled";
+};
+
+&spi12 {
+	qcom,enable-gsi-dma;
+	status = "okay";
+	max-freq = <1000000>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	can0: mcp2515@0 {
+		compatible = "microchip,mcp2515";
+		status = "okay";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <57 2>;   /* GPIO_57, IRQ_TYPE_EDGE_FALLING */
+
+		clocks = <&can0_osc>;
+		vdd-supply = <&vcc_3v3>;
+		xceiver-supply = <&vcc_3v3>;
+	};
+};
+
+&{/} {
+	can0_osc: can0-osc {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency  = <8000000>;
+	};
+};

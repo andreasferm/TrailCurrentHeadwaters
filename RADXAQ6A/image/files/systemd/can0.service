@@ -1,0 +1,22 @@
+[Unit]
+Description=Bring up can0 at 500 kbit/s (Waveshare RS485 CAN HAT, MCP2515 on SPI12/CS0)
+# We do NOT declare a Wants= or After= on sys-subsystem-net-devices-can0.device.
+# That dependency makes systemd wait ~90 s for the device unit to become active,
+# which silently holds up boot when the HAT isn't plugged in. ConditionPathExists
+# already makes the service a no-op when the interface is absent — that's enough.
+ConditionPathExists=/sys/class/net/can0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Give the MCP2515 crystal oscillator time to stabilize after power-on
+ExecStartPre=/bin/sleep 10
+ExecStart=/sbin/ip link set can0 type can bitrate 500000
+ExecStart=/sbin/ip link set can0 up
+ExecStop=/sbin/ip link set can0 down
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target
