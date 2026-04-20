@@ -83,10 +83,49 @@ log "Preflight passed"
 
 START_TIME=$SECONDS
 
+# ── Pre-build cleanup ───────────────────────────────────────────────────────
+#
+# Guarantee a clean starting state so a rebuild never accidentally reuses
+# stale artifacts from a previous run. Things that MUST be fresh:
+#
+#   * $RSDK_OUT_DIR/output.img — if the new rsdk-build fails partway, an
+#     old .img next to the new artifacts can be flashed by mistake.
+#   * /tmp/mmdebstrap.* — orphans from a previous build killed mid-run
+#     (mmdebstrap usually self-cleans, but `kill -9` leaves these).
+#   * $STAGING_DIR — same-name temp dir from a prior run.
+#
+# Things we DELIBERATELY keep:
+#
+#   * $RSDK_OUT_DIR/debs/ — apt package cache; speeds up re-downloads by
+#     10+ minutes on iterative builds.
+#   * $RSDK_OUT_DIR/config.yaml, seed.tar.xz — overwritten by rsdk-build
+#     automatically; no cleanup needed.
+#
+# rootfs.tar and build-image are nuked later in the rsdk-build section so
+# the customize-hook chain always re-runs (that's a deliberate design choice,
+# not a cleanup item).
+section "Pre-build cleanup"
+RSDK_OUT_DIR="$RSDK_DIR/out/radxa-dragon-q6a_noble_cli"
+if [ -f "$RSDK_OUT_DIR/output.img" ]; then
+    STALE_SIZE=$(du -h "$RSDK_OUT_DIR/output.img" | cut -f1)
+    rm -f "$RSDK_OUT_DIR/output.img"
+    log "Removed stale output.img ($STALE_SIZE)"
+fi
+if ls /tmp/mmdebstrap.* 1>/dev/null 2>&1; then
+    ORPHAN_COUNT=$(ls -d /tmp/mmdebstrap.* 2>/dev/null | wc -l)
+    rm -rf /tmp/mmdebstrap.*
+    log "Removed $ORPHAN_COUNT orphaned mmdebstrap temp dir(s)"
+fi
+if [ -d "$STAGING_DIR" ]; then
+    rm -rf "$STAGING_DIR"
+    log "Removed prior staging dir $STAGING_DIR"
+fi
+log "Pre-build cleanup done (debs/ cache preserved for faster re-downloads)"
+
 # ── Stage files for the build ───────────────────────────────────────────────
 section "Staging files for rsdk hooks"
 
-rm -rf "$STAGING_DIR"
+rm -rf "$STAGING_DIR"   # belt-and-suspenders; cleanup section already did this
 mkdir -p "$STAGING_DIR/repo"
 mkdir -p "$STAGING_DIR/files"
 
@@ -197,8 +236,8 @@ log ""
 cd "$RSDK_DIR"
 
 # Always start from a clean rootfs tarball so the customize-hook chain runs
-# every build (see Peregrine build.sh for the rationale).
-RSDK_OUT_DIR="$RSDK_DIR/out/radxa-dragon-q6a_noble_cli"
+# every build (see Peregrine build.sh for the rationale). RSDK_OUT_DIR was
+# already set by the pre-build-cleanup section.
 rm -f "$RSDK_OUT_DIR/build-image"
 rm -f "$RSDK_OUT_DIR/rootfs.tar"
 
