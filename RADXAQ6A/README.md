@@ -30,12 +30,67 @@ sudo ./RADXAQ6A/image/build.sh
 sudo ./RADXAQ6A/image/flash.sh --firmware
 sudo ./RADXAQ6A/image/flash.sh --os RADXAQ6A/image/output/headwaters-q6a-v0.0.28.img
 
-# 4. Connect Ethernet + 12V power, wait ~3 minutes
+# 4. Connect Ethernet + 12V power. The HAT can stay installed.
+#    Wait ~3 minutes for first-boot setup to finish.
 
 # 5. SSH in
 ssh trailcurrent@headwaters.local     # password: trailcurrent
 # The first-login wizard prompts for MQTT / admin passwords, then starts Docker.
 ```
+
+## Boot is fully unattended (how we got there)
+
+This image ships a **patched embloader.efi** that autoboots the default
+loader entry without polling UEFI ConIn when `timeout 0` is set in
+`/boot/efi/loader/loader.conf`. That matters because of the underlying
+hardware quirk:
+
+The Q6A's debug UART (`qcom_geni @ 0x994000` → `ttyMSM0`) is muxed to
+40-pin header pins 8 (TX) and 10 (RX) — `gpio22` / `gpio23` in the SoC
+pinout. RX has no on-board bias resistor, so once any HAT is installed
+on the header, EMI from adjacent high-frequency SPI clocks (e.g., the
+MCP2515 SPI bus running on `gpio48`-`gpio51`) capacitively couples
+enough noise into the floating RX line for the SoC's UART block to
+decode phantom serial bytes. Stock Radxa embloader 0.4 reads ConIn
+during the autoboot wait window even at `timeout 0`, sees those phantom
+bytes as keystrokes, and traps the user at the boot menu requiring
+keyboard intervention every boot.
+
+We attempted lighter-weight fixes first and proved them ineffective:
+
+- **Setting `BootAskValid` and `ConIn` UEFI variables from Linux** — the
+  SPI NOR firmware re-seeds both on every boot from internal config.
+  Empirically verified by writing zeros and rebooting; values reverted.
+- **Hardware pull-up on header pin 10** — would work but the project
+  excludes hardware modification.
+- **Disabling the kernel-side console on `ttyMSM0`** — irrelevant, the
+  trap is in firmware before the kernel runs.
+
+The only durable software path identified by reading
+[`embloader/src/menu/menus/text_menu.c`](https://github.com/BigfootACA/embloader/blob/0.4/embloader/src/menu/menus/text_menu.c)
+is a small patch that short-circuits the menu when `timeout == 0`. The
+patch lives at `RADXAQ6A/image/embloader/patches/0001-headwaters-
+autoboot-on-timeout-zero.patch` and is applied to upstream tag `0.4`
+(commit `9f8e74b` — exactly what Radxa ships) by
+`RADXAQ6A/image/embloader/build-embloader.sh` during image build. The
+resulting `embloader.efi` is installed to `/EFI/BOOT/BOOTAA64.EFI` and
+`/EFI/systemd/systemd-bootaa64.efi` on the ESP by rsdk hook 19d. Hook
+22 verifies the sha256 matches the build-side artifact.
+
+### Build-host prerequisites for the embloader build
+
+In addition to the standard image-build deps (jsonnet, bdebstrap,
+guestfish, etc.) the embloader build needs:
+
+```bash
+sudo apt install -y nasm acpica-tools uuid-dev pkg-config
+```
+
+`./RADXAQ6A/image/preflight.sh` checks for all of these. The first
+embloader build clones EDK2 (~5 min) and produces a ~1.5 MB
+`embloader.efi`. Subsequent builds are cached under `RADXAQ6A/image/
+cache/embloader-build/` keyed on the patch SHA + upstream commit — only
+rebuilds if you change the patch or bump the pinned commit.
 
 ## Why Q6A?
 

@@ -200,6 +200,22 @@ for dts in "$SCRIPT_DIR/overlays/"*.dts; do
     log "  compiled ${base}.dtbo ($(du -b "$out" | cut -f1) bytes)"
 done
 
+# Build the patched embloader.efi — replaces Radxa's stock systemd-bootaa64.efi
+# at the hook stage so first-boot and every subsequent boot autoboots cleanly
+# regardless of phantom UART input on the floating debug-UART RX pin (gpio23).
+# Cached under cache/embloader-build/ keyed on patch SHA + upstream commit, so
+# only the first build pays the EDK2 clone + basetools cost.
+log "Building patched embloader.efi (cached on patch+commit hash)"
+if ! "$SCRIPT_DIR/embloader/build-embloader.sh"; then
+    fatal "embloader build failed — see output above"
+fi
+mkdir -p "$STAGING_DIR/files/embloader"
+install -m 644 "$SCRIPT_DIR/embloader/output/embloader.efi" \
+    "$STAGING_DIR/files/embloader/embloader.efi"
+install -m 644 "$SCRIPT_DIR/embloader/output/embloader.efi.sha256" \
+    "$STAGING_DIR/files/embloader/embloader.efi.sha256"
+log "  staged $(du -h "$STAGING_DIR/files/embloader/embloader.efi" | cut -f1) embloader.efi"
+
 STAGE_SIZE=$(du -sh "$STAGING_DIR" | cut -f1)
 log "Staged $STAGE_SIZE total"
 
@@ -308,7 +324,12 @@ echo "    3. Flash SPI NOR firmware (one-time per board):"
 echo "         sudo ./RADXAQ6A/image/flash.sh --firmware"
 echo "    4. Flash the OS image to NVMe:"
 echo "         sudo ./RADXAQ6A/image/flash.sh --os $FINAL_IMG"
-echo "    5. Connect Ethernet, apply 12V power, wait ~3 min for first-boot"
+echo "    5. Connect Ethernet, apply 12V power. The HAT can stay installed —"
+echo "       this image ships a patched embloader.efi that autoboots without"
+echo "       polling ConIn, so phantom UART input from the floating debug-"
+echo "       UART RX pin (gpio23) doesn't trap the boot menu. See"
+echo "       RADXAQ6A/README.md \"Boot is fully unattended\" for the rationale."
+echo "       Wait ~3 min for first-boot setup to finish."
 echo "    6. SSH:"
 echo "         ssh trailcurrent@headwaters.local"
 echo "         (default password: trailcurrent)"

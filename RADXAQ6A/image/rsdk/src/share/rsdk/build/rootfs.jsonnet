@@ -293,6 +293,7 @@ function(
 
                 for unit in \
                     headwaters-firstboot.service \
+                    headwaters-firstboot-network.service \
                     headwaters-load-images.service \
                     cpu-powersave.service \
                     power-save-hw.service \
@@ -319,6 +320,10 @@ function(
                 FILES="$STAGING/files"
                 install -m 755 "$FILES/scripts/headwaters-firstboot.sh" \
                     "$1/usr/local/sbin/headwaters-firstboot.sh"
+                install -m 755 "$FILES/scripts/headwaters-firstboot-network.sh" \
+                    "$1/usr/local/sbin/headwaters-firstboot-network.sh"
+                install -m 755 "$FILES/scripts/headwaters-can0-up.sh" \
+                    "$1/usr/local/sbin/headwaters-can0-up.sh"
                 install -m 755 "$FILES/scripts/headwaters-first-login.sh" \
                     "$1/usr/local/bin/headwaters-first-login.sh"
                 install -m 755 "$FILES/scripts/headwaters-load-images.sh" \
@@ -358,6 +363,7 @@ function(
                     avahi-daemon.service \
                     docker.service \
                     headwaters-firstboot.service \
+                    headwaters-firstboot-network.service \
                     headwaters-load-images.service \
                     cpu-powersave.service \
                     power-save-hw.service \
@@ -593,16 +599,26 @@ function(
             // ════════════════════════════════════════════════════════════════
             |||
                 set -e
-                echo "[hook 19b] enabling MCP2515 SPI CAN overlay (Waveshare RS485 CAN HAT)"
+                echo "[hook 19b] installing device-tree overlays (CAN HAT + unused-pins disable)"
 
                 STAGING="${HEADWATERS_STAGING:-/tmp/headwaters-staging}"
-                OVR_NAME="qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-12mhz.dtbo"
-                OVR_SRC="$STAGING/files/dtbo/$OVR_NAME"
-                if [ ! -f "$OVR_SRC" ]; then
-                    echo "  ERROR: $OVR_NAME missing from staging at $OVR_SRC" >&2
-                    echo "         build.sh should have compiled overlays/*.dts with dtc." >&2
-                    exit 1
-                fi
+
+                # All overlays we ship. They were compiled from overlays/*.dts
+                # by build.sh into $STAGING/files/dtbo/*.dtbo before this hook
+                # runs. Order here is also the order applied at boot — list
+                # the unused-pins-disable LAST so its gpio-hog claims happen
+                # after the active drivers (MCP2515) have taken their pins.
+                OVERLAYS="
+                    qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-12mhz.dtbo
+                    qcs6490-radxa-dragon-q6a-headwaters-unused-pins-disable.dtbo
+                "
+                for OVR in $OVERLAYS; do
+                    if [ ! -f "$STAGING/files/dtbo/$OVR" ]; then
+                        echo "  ERROR: overlay $OVR missing from staging at $STAGING/files/dtbo/" >&2
+                        echo "         build.sh should have compiled overlays/*.dts with dtc." >&2
+                        exit 1
+                    fi
+                done
 
                 # Identify installed kernel (the one whose base DTB we'll reference)
                 KVER=""
@@ -628,8 +644,10 @@ function(
                 EFI_ENTRY="$1/boot/efi/$ENTRY_TOKEN/$KVER"
                 mkdir -p "$EFI_ENTRY/dtbo"
 
-                # Install the pre-compiled overlay
-                install -m 644 "$OVR_SRC" "$EFI_ENTRY/dtbo/$OVR_NAME"
+                # Install all pre-compiled overlays
+                for OVR in $OVERLAYS; do
+                    install -m 644 "$STAGING/files/dtbo/$OVR" "$EFI_ENTRY/dtbo/$OVR"
+                done
 
                 # Copy the base DTB into the entry dir so the loader entry can
                 # reference it with a path inside the ESP
@@ -652,15 +670,114 @@ function(
                     exit 1
                 fi
 
-                # Rewrite devicetree + devicetree-overlay lines (idempotent)
+                # Rewrite devicetree + devicetree-overlay lines (idempotent).
+                # systemd-boot accepts multiple devicetree-overlay lines and
+                # applies them in the order they appear.
                 sed -i '/^devicetree /d; /^devicetree-overlay /d' "$LOADER"
                 {
                     echo "devicetree /$ENTRY_TOKEN/$KVER/$BASE_NAME"
-                    echo "devicetree-overlay /$ENTRY_TOKEN/$KVER/dtbo/$OVR_NAME"
+                    for OVR in $OVERLAYS; do
+                        echo "devicetree-overlay /$ENTRY_TOKEN/$KVER/dtbo/$OVR"
+                    done
                 } >> "$LOADER"
 
-                echo "  enabled: $OVR_NAME"
+                echo "  enabled overlays:"
+                for OVR in $OVERLAYS; do
+                    echo "    $OVR"
+                done
                 echo "  loader:  $(basename "$LOADER")"
+            |||,
+
+            // ════════════════════════════════════════════════════════════════
+            // Hook 19c: Harden systemd-boot loader.conf for unattended boot
+            //
+            // The default loader.conf written by `bootctl install` (then
+            // un-commented by core.libjsonnet) ships `timeout 3`, which makes
+            // sd-boot show the menu for 3 seconds AND freeze autoboot on any
+            // keypress. On Q6A first boots we observed phantom serial input
+            // arriving on the EFI conin (suspected RS485 HAT or floating
+            // debug-UART RX), which trapped the board at the menu indefinitely
+            // and required keyboard intervention to proceed.
+            //
+            // `timeout 0` boots immediately; `editor no` disables the boot
+            // entry editor (also keypress-triggered). Together these make
+            // first boot fully unattended even with a noisy serial line.
+            // To enter the menu for recovery, hold space during the brief
+            // autoboot window.
+            // ════════════════════════════════════════════════════════════════
+            |||
+                set -e
+                echo "[hook 19c] writing hardened loader.conf for unattended boot"
+                LOADER_CONF="$1/boot/efi/loader/loader.conf"
+                if [ ! -f "$LOADER_CONF" ]; then
+                    echo "  ERROR: $LOADER_CONF missing — bootctl install did not run?" >&2
+                    exit 1
+                fi
+                {
+                    printf 'default RadxaOS-*\n'
+                    printf 'timeout 0\n'
+                    printf 'console-mode keep\n'
+                    printf 'editor no\n'
+                    # auto-firmware no: suppress the synthetic "Reboot Into
+                    # Firmware Interface" entry. With our patched embloader,
+                    # timeout=0 already skips the menu; this is just one
+                    # fewer entry for the menu code to enumerate.
+                    printf 'auto-firmware no\n'
+                } > "$LOADER_CONF"
+                echo "  wrote $LOADER_CONF:"
+                sed 's/^/    /' "$LOADER_CONF"
+            |||,
+
+            // ════════════════════════════════════════════════════════════════
+            // Hook 19d: Install patched embloader.efi over Radxa's stock build
+            //
+            // Radxa's `sdboot-is-embloader` package installs an unpatched
+            // upstream embloader 0.4 binary at /EFI/systemd/systemd-bootaa64.efi
+            // and /EFI/BOOT/BOOTAA64.EFI. That binary's text-menu code in
+            // src/menu/menus/text_menu.c always pumps gST->ConIn during the
+            // autoboot timeout window, even when timeout=0. Phantom serial
+            // bytes from the floating debug-UART RX pin (gpio23 / header
+            // pin 10) capacitively-coupled to adjacent SPI clocks on a HAT
+            // get decoded as keystrokes and trap the user at the menu.
+            //
+            // We rebuild embloader from upstream tag 0.4 (commit 9f8e74b)
+            // with a one-block patch (RADXAQ6A/image/embloader/patches/
+            // 0001-headwaters-autoboot-on-timeout-zero.patch) that returns
+            // the default loader immediately when timeout==0, never touching
+            // ConIn. build.sh runs the build before this hook and stages the
+            // resulting embloader.efi at $STAGING/files/embloader/.
+            //
+            // We overwrite both EFI binary names because some firmware boots
+            // /EFI/BOOT/BOOTAA64.EFI directly while others use the named
+            // /EFI/systemd/systemd-bootaa64.efi (set as the default loader
+            // by `bootctl install --no-variables`).
+            // ════════════════════════════════════════════════════════════════
+            |||
+                set -e
+                echo "[hook 19d] installing patched embloader.efi"
+                STAGING="${HEADWATERS_STAGING:-/tmp/headwaters-staging}"
+                SRC="$STAGING/files/embloader/embloader.efi"
+                if [ ! -f "$SRC" ]; then
+                    echo "  ERROR: $SRC missing — build.sh should have built it" >&2
+                    exit 1
+                fi
+                EXPECTED_SHA=$(cut -d' ' -f1 "$STAGING/files/embloader/embloader.efi.sha256")
+                ACTUAL_SHA=$(sha256sum "$SRC" | cut -d' ' -f1)
+                if [ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]; then
+                    echo "  ERROR: embloader.efi sha256 mismatch ($EXPECTED_SHA vs $ACTUAL_SHA)" >&2
+                    exit 1
+                fi
+                echo "  patched embloader.efi sha256: $ACTUAL_SHA"
+                # Both copies. Install over Radxa's stock binary if present;
+                # write fresh otherwise.
+                for dest in \
+                    "$1/boot/efi/EFI/BOOT/BOOTAA64.EFI" \
+                    "$1/boot/efi/EFI/systemd/systemd-bootaa64.efi"
+                do
+                    mkdir -p "$(dirname "$dest")"
+                    install -m 644 "$SRC" "$dest"
+                    echo "  installed: ${dest#$1}"
+                done
             |||,
 
             // ════════════════════════════════════════════════════════════════
@@ -733,9 +850,12 @@ function(
                 check   "$1" /home/trailcurrent/config/mosquitto
                 check_x "$1" /home/trailcurrent/scripts/generate-certs.sh
                 check_x "$1" /usr/local/sbin/headwaters-firstboot.sh
+                check_x "$1" /usr/local/sbin/headwaters-firstboot-network.sh
+                check_x "$1" /usr/local/sbin/headwaters-can0-up.sh
                 check_x "$1" /usr/local/bin/headwaters-first-login.sh
                 check_x "$1" /usr/local/sbin/headwaters-load-images.sh
                 check   "$1" /etc/systemd/system/headwaters-firstboot.service
+                check   "$1" /etc/systemd/system/headwaters-firstboot-network.service
                 check   "$1" /etc/systemd/system/cpu-powersave.service
                 check   "$1" /etc/systemd/system/power-save-hw.service
                 check   "$1" /etc/systemd/system/can0.service
@@ -798,22 +918,55 @@ function(
                     FAIL=$((FAIL+1))
                 fi
 
-                # Verify MCP2515 SPI CAN overlay is enabled in the systemd-boot entry
-                CAN_OVR="qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-12mhz.dtbo"
-                if ls "$1"/boot/efi/*/[0-9]*/dtbo/"$CAN_OVR" 1>/dev/null 2>&1; then
-                    echo "  ✓ MCP2515 overlay staged in /boot/efi/<token>/<kver>/dtbo/"
-                else
-                    echo "  ✗ MCP2515 overlay NOT staged"
-                    FAIL=$((FAIL+1))
-                fi
-                if grep -r --include='*.conf' -l "devicetree-overlay .*$CAN_OVR" \
-                   "$1/boot/efi/loader/entries/" >/dev/null 2>&1; then
-                    echo "  ✓ systemd-boot loader entry references MCP2515 overlay"
-                else
-                    echo "  ✗ no loader entry references $CAN_OVR"
-                    FAIL=$((FAIL+1))
-                fi
-                for svc in ssh docker headwaters-firstboot headwaters-load-images \
+                # Verify all expected device-tree overlays are staged AND
+                # referenced by the systemd-boot loader entry (hook 19b).
+                for OVR in \
+                    "qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-12mhz.dtbo" \
+                    "qcs6490-radxa-dragon-q6a-headwaters-unused-pins-disable.dtbo"
+                do
+                    if ls "$1"/boot/efi/*/[0-9]*/dtbo/"$OVR" 1>/dev/null 2>&1; then
+                        echo "  ✓ overlay staged: $OVR"
+                    else
+                        echo "  ✗ overlay NOT staged: $OVR"
+                        FAIL=$((FAIL+1))
+                    fi
+                    if grep -r --include='*.conf' -l "devicetree-overlay .*$OVR" \
+                       "$1/boot/efi/loader/entries/" >/dev/null 2>&1; then
+                        echo "  ✓ loader entry references $OVR"
+                    else
+                        echo "  ✗ no loader entry references $OVR"
+                        FAIL=$((FAIL+1))
+                    fi
+                done
+
+                # Verify the patched embloader.efi is installed (hook 19d).
+                # Without it, autoboot is interrupted by phantom UART input.
+                STAGING="${HEADWATERS_STAGING:-/tmp/headwaters-staging}"
+                EXPECTED_SHA=$(cut -d' ' -f1 "$STAGING/files/embloader/embloader.efi.sha256" 2>/dev/null || echo "")
+                for dest in \
+                    "$1/boot/efi/EFI/BOOT/BOOTAA64.EFI" \
+                    "$1/boot/efi/EFI/systemd/systemd-bootaa64.efi"
+                do
+                    if [ ! -f "$dest" ]; then
+                        echo "  ✗ embloader binary missing: ${dest#$1}"
+                        FAIL=$((FAIL+1))
+                        continue
+                    fi
+                    if [ -z "$EXPECTED_SHA" ]; then
+                        echo "  ! cannot verify ${dest#$1}: build-side sha256 file missing"
+                        continue
+                    fi
+                    GOT_SHA=$(sha256sum "$dest" | cut -d' ' -f1)
+                    if [ "$GOT_SHA" = "$EXPECTED_SHA" ]; then
+                        echo "  ✓ patched embloader installed: ${dest#$1}"
+                    else
+                        echo "  ✗ embloader sha256 mismatch at ${dest#$1}: got $GOT_SHA expected $EXPECTED_SHA"
+                        FAIL=$((FAIL+1))
+                    fi
+                done
+
+                for svc in ssh docker headwaters-firstboot headwaters-firstboot-network \
+                           headwaters-load-images \
                            cpu-powersave power-save-hw can0 cantomqtt \
                            discovery-mdns deployment-watcher; do
                     if chroot "$1" systemctl is-enabled "$svc" >/dev/null 2>&1; then

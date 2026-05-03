@@ -12,7 +12,7 @@ RemainAfterExit=yes
 ExecStart=/usr/local/sbin/headwaters-firstboot.sh
 StandardOutput=journal+console
 StandardError=journal+console
-TimeoutStartSec=300
+TimeoutStartSec=1800
 
 [Install]
 WantedBy=sysinit.target

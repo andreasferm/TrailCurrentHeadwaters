@@ -32,7 +32,7 @@ function(
     !echo "Image generation started at $(date)."
     echo "Allocating image file..."
     !rm -f "%(output)s"
-    disk-create "%(output)s" raw 40G
+    disk-create "%(output)s" raw 60G
     add-drive "%(output)s" format:raw discard:besteffort blocksize:%(sector_size)d
     run
 
@@ -196,7 +196,20 @@ then
 else
     ""
 ) +
-(if sector_size == 512
+// Shrink-to-minimum step DISABLED for Headwaters Q6A.
+//
+// The default rsdk pipeline shrinks the rootfs to absolute minimum after
+// deploying data, then truncates the image file to match. For an image
+// shipping with ~26 GB of map tiles + ~3 GB of system, that leaves under
+// 1 GB free in the flashed partition — and headwaters-firstboot.service
+// must run cert generation, pip install, etc. BEFORE resize2fs runs. With
+// no headroom it deadlocks or fails partway. Shipping the full 60 GB image
+// gives ~30 GB free space at first boot, well before the rootfs gets
+// expanded to fill the underlying NVMe.
+//
+// Keep the GPT backup-table fixup since the partition layout is otherwise
+// unchanged from the original 60 GB allocation.
+(if false
 then
 |||
 

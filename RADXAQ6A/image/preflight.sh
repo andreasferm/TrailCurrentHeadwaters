@@ -41,7 +41,7 @@ echo ""
 # ── 1. APT build dependencies ───────────────────────────────────────────────
 step "1. APT build dependencies"
 
-REQUIRED_TOOLS=(jsonnet bdebstrap guestfish qemu-aarch64-static sgdisk parted git curl gpg dtc rsync unzip)
+REQUIRED_TOOLS=(jsonnet bdebstrap guestfish qemu-aarch64-static sgdisk parted git curl gpg dtc rsync unzip nasm iasl pkg-config aarch64-linux-gnu-gcc)
 MISSING_PKGS=()
 
 for tool in "${REQUIRED_TOOLS[@]}"; do
@@ -62,9 +62,23 @@ for tool in "${REQUIRED_TOOLS[@]}"; do
             dtc)                MISSING_PKGS+=(device-tree-compiler) ;;
             rsync)              MISSING_PKGS+=(rsync) ;;
             unzip)              MISSING_PKGS+=(unzip) ;;
+            # embloader build tooling — needed to compile the patched
+            # systemd-boot fork (see embloader/build-embloader.sh).
+            nasm)               MISSING_PKGS+=(nasm) ;;
+            iasl)               MISSING_PKGS+=(acpica-tools) ;;
+            pkg-config)         MISSING_PKGS+=(pkg-config) ;;
+            aarch64-linux-gnu-gcc) MISSING_PKGS+=(gcc-aarch64-linux-gnu) ;;
         esac
     fi
 done
+
+# uuid-dev provides /usr/include/uuid/uuid.h, required by EDK2's BaseTools
+if [ -e /usr/include/uuid/uuid.h ]; then
+    ok "uuid/uuid.h header"
+else
+    fail "uuid/uuid.h header — missing"
+    MISSING_PKGS+=(uuid-dev)
+fi
 
 if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
     UNIQ_PKGS=$(printf '%s\n' "${MISSING_PKGS[@]}" | sort -u | tr '\n' ' ')
