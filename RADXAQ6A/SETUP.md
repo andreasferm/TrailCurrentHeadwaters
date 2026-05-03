@@ -68,13 +68,33 @@ The image includes:
 
 1. **Disconnect the USB-C cable** from the Q6A
 2. Connect Ethernet to the Q6A
-3. Apply 12 V power
-4. Wait ~3 minutes — first boot runs `headwaters-firstboot.service` which:
-   - Regenerates `machine-id` and SSH host keys
+3. Apply 12 V power (with or without the Waveshare CAN HAT — both work
+   from first boot)
+4. Wait ~3 minutes — first boot runs two services in sequence:
+
+   **`headwaters-firstboot.service`** (early, runs before networking):
    - Expands the root partition to fill the NVMe
-   - Generates TLS/SSL certificates for `headwaters.local`
-   - Creates the Python venv and installs CAN-to-MQTT dependencies
-   - Loads the baked-in Docker image tarballs (`headwaters-load-images.service`)
+   - Regenerates `machine-id` and SSH host keys
+   - Re-asserts SSH service enable / socket masking
+   - Creates Docker bind-mount target directories
+   - Generates per-device TLS/SSL certificates for `headwaters.local`
+
+   **`headwaters-firstboot-network.service`** (deferred, after `network-online.target`):
+   - Waits for DNS to resolve `pypi.org`
+   - Creates the Python venv at `/home/trailcurrent/local_code/cantomqtt`
+   - `pip install -r requirements.txt` with up to 5 retries on transient
+     PyPI failures
+   - Verifies every dependent module imports cleanly
+   - Restarts the Python services (cantomqtt, discovery-mdns,
+     deployment-watcher) so they pick up the populated venv
+
+   Plus `headwaters-load-images.service` loads the baked-in Docker
+   image tarballs.
+
+Each service writes its own sentinel (`/var/lib/headwaters/.firstboot-done`,
+`.firstboot-network-done`) only after every step succeeds, so a partial
+failure simply re-runs on the next boot rather than leaving the board
+in a half-configured state.
 
 Monitor progress (optional) with a serial console if you have one wired
 up, or just wait and try to SSH.
@@ -118,18 +138,21 @@ to trust it (Chrome/Firefox/macOS/Windows all have one-click options).
 ```bash
 docker compose ps       # 5 containers should be "Up"
 systemctl status cantomqtt discovery-mdns deployment-watcher --no-pager
-sudo journalctl -u headwaters-firstboot -b   # first-boot log
+sudo journalctl -u headwaters-firstboot -b           # early first-boot log
+sudo journalctl -u headwaters-firstboot-network -b   # network first-boot log
 ```
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| No `headwaters.local` on the network | firstboot never completed | SSH by IP and `journalctl -b -u headwaters-firstboot` |
-| SSH refused | firstboot still running | wait 3 min; first-boot regens host keys |
+| Boot menu appears, requires keypress | Board was flashed with an image built before the patched embloader landed; the old `BOOTAA64.EFI` is still on the ESP | Rebuild the OS image and re-flash. The patched embloader lives at `/EFI/BOOT/BOOTAA64.EFI` and `/EFI/systemd/systemd-bootaa64.efi` and matches the sha256 in `RADXAQ6A/image/embloader/output/embloader.efi.sha256`. |
+| No `headwaters.local` on the network | early firstboot never completed | SSH by IP and `journalctl -b -u headwaters-firstboot` |
+| SSH refused | early firstboot still running | wait 3 min; first-boot regens host keys |
+| Python services (`cantomqtt`/`discovery-mdns`/`deployment-watcher`) crash-looping with `ModuleNotFoundError` | `headwaters-firstboot-network.service` failed (no DNS, PyPI outage, etc.) — the venv is empty or partial | `journalctl -b -u headwaters-firstboot-network`. If it failed cleanly the sentinel is absent and a reboot retries. To force a re-run without rebooting: `sudo rm /var/lib/headwaters/.firstboot-network-done && sudo systemctl start headwaters-firstboot-network.service` |
 | `docker compose ps` empty | images not loaded | `systemctl status headwaters-load-images` |
 | Tileserver container restarting | `map.mbtiles` missing in image | rebuild with `data/tileserver/map.mbtiles` present |
-| `can0` not appearing | MCP2515 overlay didn't merge at boot | `grep devicetree /boot/efi/loader/entries/*.conf` — both `devicetree` and `devicetree-overlay` lines must exist. Check `dmesg \| grep -iE 'mcp251x\|spi12'` for probe errors (wrong CS, missing HAT, 12 MHz instead of 8 MHz crystal variant). |
-| `cantomqtt.service` inactive | `can0` absent (see row above), or `local_code/can-to-mqtt.py` wasn't staged | `ls /home/trailcurrent/local_code/` to confirm Python code is present |
+| `can0` netdev not appearing | MCP2515 overlay didn't merge at boot, or HAT not seated | `grep devicetree /boot/efi/loader/entries/*.conf` — both `devicetree` and `devicetree-overlay` lines must exist. Check `dmesg \| grep -iE 'mcp251x\|spi12'` for probe errors (wrong CS, missing HAT, 12 MHz instead of 8 MHz crystal variant). |
+| `can0` netdev exists but interface stays down | `headwaters-can0-up.sh` exited cleanly because the deadline expired before the MCP2515 driver bound — rare race on extremely slow first boots | `sudo systemctl restart can0.service` brings it up. If this is recurring, check `journalctl -b -u can0` for the "did not appear within 30s" log line and consider widening `DEADLINE_SEC` in the script. |
 
 For anything else, attach the output of the commands in step 7.

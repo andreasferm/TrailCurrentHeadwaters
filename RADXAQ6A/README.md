@@ -83,7 +83,7 @@ In addition to the standard image-build deps (jsonnet, bdebstrap,
 guestfish, etc.) the embloader build needs:
 
 ```bash
-sudo apt install -y nasm acpica-tools uuid-dev pkg-config
+sudo apt install -y nasm acpica-tools uuid-dev pkg-config gcc-aarch64-linux-gnu
 ```
 
 `./RADXAQ6A/image/preflight.sh` checks for all of these. The first
@@ -91,6 +91,36 @@ embloader build clones EDK2 (~5 min) and produces a ~1.5 MB
 `embloader.efi`. Subsequent builds are cached under `RADXAQ6A/image/
 cache/embloader-build/` keyed on the patch SHA + upstream commit — only
 rebuilds if you change the patch or bump the pinned commit.
+
+## First-boot service architecture
+
+The work that runs once on a freshly flashed board is split across two
+units. The split is load-bearing: `pip install` requires the network,
+which isn't available before `sysinit.target`, but rootfs resize and
+SSH host-key generation must run that early. Mixing them in one unit
+guarantees one of the two breaks every time.
+
+| Unit | Ordering | Responsibilities | Sentinel |
+|------|---------|------------------|----------|
+| `headwaters-firstboot.service` | `Before=sysinit.target` | Resize root partition, regenerate `machine-id`, regenerate SSH host keys, the SSH-socket dance, create Docker bind-mount targets, generate per-device TLS/SSL certificates | `/var/lib/headwaters/.firstboot-done` |
+| `headwaters-firstboot-network.service` | `After=network-online.target` | Create the Python venv, `pip install -r requirements.txt` (with DNS-wait + 5× retry + import-verify), restart the Python services so they pick up the populated venv | `/var/lib/headwaters/.firstboot-network-done` |
+
+Both units check `ConditionPathExists=!<sentinel>` so they only run
+once, and both refuse to write their sentinel unless every step
+succeeded — a partial failure leaves the sentinel absent and the unit
+re-runs on the next boot. Empirically, the network-stage retry budget
+handles transient DNS hiccups and PyPI outages without operator
+intervention.
+
+## CAN bus reliability (race-free bring-up)
+
+`can0.service` invokes `headwaters-can0-up.sh` instead of using
+`ConditionPathExists=/sys/class/net/can0`. The condition fires too
+early on cold boot — before the MCP2515 SPI driver finishes binding —
+and silently skips the service. The script polls for the netdev with a
+30 s deadline, configures it at 500 kbit/s when it appears, and exits
+cleanly if it never does. No boot stall when the HAT is absent
+(bench/dev), no race when it's present (production).
 
 ## Why Q6A?
 
