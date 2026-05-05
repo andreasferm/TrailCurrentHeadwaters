@@ -58,7 +58,13 @@ if [ "$state" = "up" ]; then
 fi
 
 log "configuring $IFACE at $BITRATE bps and bringing up"
-if ! ip link set "$IFACE" type can bitrate "$BITRATE"; then
+# restart-ms 100: kernel auto-recovers from BUS-OFF after 100 ms. Without this
+# (default = 0), a single bus-off event — e.g. booting alone with no peer to
+# ACK transmits, a transient wiring glitch, or a peer dropping off the bus —
+# latches the controller permanently dead until manual ip link down/up. With
+# 100 ms, the controller cycles through recovery silently; once a peer is
+# present, normal operation resumes. Standard automotive value.
+if ! ip link set "$IFACE" type can bitrate "$BITRATE" restart-ms 100; then
     log "ERROR: failed to set bitrate on $IFACE"
     exit 1
 fi

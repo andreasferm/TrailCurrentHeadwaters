@@ -95,7 +95,14 @@ mmdebstrap:
       RemainAfterExit=yes
       # Delay for MCP2515 crystal oscillator to stabilize after power-on
       ExecStartPre=/bin/sleep 15
-      ExecStart=/sbin/ip link set can0 type can bitrate 500000
+      # restart-ms 100: kernel auto-recovers from BUS-OFF after 100 ms. Without
+      # this (default = 0), a single bus-off event — e.g. booting alone with
+      # no peer to ACK transmits, a transient wiring glitch, or a peer dropping
+      # off the bus — latches the controller permanently dead until manual
+      # ip link down/up. With 100 ms, the controller cycles through recovery
+      # silently; once a peer is present, normal operation resumes. Standard
+      # automotive value.
+      ExecStart=/sbin/ip link set can0 type can bitrate 500000 restart-ms 100
       ExecStart=/sbin/ip link set can0 up
       ExecStop=/sbin/ip link set can0 down
       Restart=on-failure
