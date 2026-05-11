@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { ObjectId } = require('mongodb');
 
+// All TrailCurrent modules — the union of ESP32-class MCUs and Linux-class
+// endpoints (Playbill, future Peregrine head, etc.). Variable name kept for
+// backward-compat with the persisted system_config.mcu_modules field, but
+// the concept is "TrailCurrent module" generally; the `linux` flag marks
+// the small set that don't have a CAN address.
 const MCU_MODULES = [
     { id: 'fireside', name: 'Fireside', wireless: true },
     { id: 'spotter', name: 'Spotter' },
@@ -16,7 +21,8 @@ const MCU_MODULES = [
     { id: 'picket', name: 'Picket' },
     { id: 'bearing', name: 'Bearing' },
     { id: 'therma', name: 'Therma' },
-    { id: 'switchback', name: 'Switchback' }
+    { id: 'switchback', name: 'Switchback' },
+    { id: 'playbill', name: 'Playbill', wireless: true, linux: true }
 ];
 
 const VALID_MODULE_IDS = MCU_MODULES.map(m => m.id);

@@ -179,6 +179,20 @@ def main():
         client.reconnect_delay_set(min_delay=1, max_delay=30)
         client.connect(MQTT_BROKER, MQTT_PORT, 60)
         client.loop_start()
+        # NB: this script is intentionally a wire-only passthrough between
+        # can0 and MQTT. There is NO per-CAN-ID filter, allowlist, or
+        # denylist, and there must not be one — endpoints (Bearing, Solstice,
+        # Playbill, future third-party MCUs) own their own DBC encoding/
+        # decoding. Specific ranges to keep in mind:
+        #   0x004              Firmware version broadcast
+        #   0x018, 0x025-0x02a Lights / relays (Switchback, Torrent)
+        #   0x100-0x10F        Playbill instance 0 (Nav/Transport/Radio/
+        #   0x110-0x11F        Playbill instance 1   System/LaunchSource/
+        #   0x120-0x12F        Playbill instance 2   Volume/Presence)
+        # See TrailCurrentDocumentation/TrailCurrent.dbc + Playbill
+        # docs/app/dbc-additions.md for the full list. If you find yourself
+        # adding a filter, ask why first — the rule is "every frame, both
+        # directions."
         while not shutdown_requested:
             # Timeout lets the loop check shutdown_requested periodically
             message = bus.recv(timeout=1.0)

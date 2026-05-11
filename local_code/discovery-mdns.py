@@ -31,6 +31,12 @@ MQTT_TOPIC_STOP = 'discovery/browse/stop'
 MQTT_TOPIC_FOUND = 'discovery/browse/found'
 MQTT_TOPIC_CONFIRM_REQUEST = 'discovery/confirm/request'
 MQTT_TOPIC_CONFIRM_RESPONSE = 'discovery/confirm/response'
+# Playbill (Linux endpoint) onboarding — instead of an HTTP GET marker, the
+# host POSTs broker credentials to the device so it can connect to the rig.
+# Distinct topic pair so a future second non-MCU endpoint type doesn't
+# overload the MCU confirm contract.
+MQTT_TOPIC_CLAIM_REQUEST = 'discovery/claim/request'
+MQTT_TOPIC_CLAIM_RESPONSE = 'discovery/claim/response'
 
 shutdown_requested = False
 browse_lock = threading.Lock()
@@ -117,10 +123,7 @@ class TrailCurrentListener:
                 txt[key] = val
 
         module_type = txt.get('type', 'unknown')
-        addr = txt.get('addr', '0')
-        canid = txt.get('canid', '0x00')
         fw = txt.get('fw', '0.0.0')
-        target = txt.get('target', '')  # e.g. "torrent" or "switchback" (Tapper only)
 
         # Avoid publishing duplicates within the same browse session
         global found_hostnames
@@ -131,14 +134,40 @@ class TrailCurrentListener:
         payload = {
             'hostname': hostname,
             'type': module_type,
-            'addr': int(addr),
-            'canid': canid,
-            'fw': fw
+            'fw': fw,
         }
-        if target:
-            payload['target'] = target
 
-        print(f"[mDNS] Found module: {payload}")
+        # ESP32 MCU modules advertise addr (int) and canid (hex string). Linux
+        # endpoints (Playbill) don't have either — they identify by hostname
+        # and their MQTT slug. Keep addr/canid optional so a Playbill TXT
+        # record without them parses cleanly.
+        if 'addr' in txt:
+            try:
+                payload['addr'] = int(txt['addr'])
+            except ValueError:
+                payload['addr'] = 0
+        if 'canid' in txt:
+            payload['canid'] = txt['canid']
+
+        # Optional extras some advertisers include:
+        #   target       — Tapper variant ("torrent" / "switchback")
+        #   name         — friendly display name (Playbill)
+        #   deviceId     — stable MQTT topic slug (Playbill)
+        #   canInstance  — Playbill's CAN block selection (0/1/2 or absent)
+        for key in ('target', 'name', 'deviceId', 'canInstance'):
+            if key in txt:
+                payload[key] = txt[key]
+
+        # Discovery hints the front-end uses to render the card and pick the
+        # right onboarding flow:
+        #   confirm — MCU pattern: HTTP GET /discovery/confirm marker (default)
+        #   claim   — Linux pattern: HTTP POST /discovery/claim with creds
+        if module_type == 'playbill':
+            payload['onboard'] = 'claim'
+        else:
+            payload['onboard'] = 'confirm'
+
+        print(f"[mDNS] Found device: {payload}")
         self.mqtt_pub(MQTT_TOPIC_FOUND, json.dumps(payload), qos=1)
 
     def remove_service(self, zc, service_type, name):
@@ -196,6 +225,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
         client.subscribe(MQTT_TOPIC_START)
         client.subscribe(MQTT_TOPIC_STOP)
         client.subscribe(MQTT_TOPIC_CONFIRM_REQUEST)
+        client.subscribe(MQTT_TOPIC_CLAIM_REQUEST)
     else:
         print(f"Failed to connect to MQTT broker: {reason_code}")
 
@@ -236,6 +266,60 @@ def confirm_module(hostname, mqtt_publish):
                  qos=1)
 
 
+def claim_playbill(hostname, creds, mqtt_publish):
+    """POST broker credentials to a discovered Playbill so it can connect
+    to the rig's MQTT broker. Returns success/failure on
+    discovery/claim/response.
+
+    Body shape (must match what the Playbill controller's HTTP handler
+    expects):
+      {
+        "brokerUrl":       "mqtts://headwaters.local:8883",
+        "username":        "trailcurrent",
+        "password":        "...",
+        "caCertPem":       "-----BEGIN CERTIFICATE-----\\n...",
+        "tlsCertHostname": "trailcurrent.local"
+      }
+
+    The Playbill is expected to persist these to
+    ~/.config/trailcurrent-playbill/connection.json (and ca.pem), then
+    reconnect its MQTT bridge. Success on the wire = HTTP 200; the rig sees
+    the Playbill come online via its retained
+    local/playbill/<deviceId>/system/status presence.
+    """
+    url = f"http://{hostname}.local/discovery/claim"
+    max_attempts = 3
+    last_error = None
+    body = json.dumps(creds).encode('utf-8')
+
+    for attempt in range(1, max_attempts + 1):
+        print(f"[Claim] Attempt {attempt}/{max_attempts}: {url}")
+        try:
+            req = Request(url, data=body, method='POST',
+                          headers={'Content-Type': 'application/json'})
+            resp = urlopen(req, timeout=10)
+            status = resp.getcode()
+            payload = resp.read().decode('utf-8').strip()
+            if 200 <= status < 300:
+                print(f"[Claim] Playbill {hostname} accepted credentials (HTTP {status})")
+                mqtt_publish(MQTT_TOPIC_CLAIM_RESPONSE,
+                             json.dumps({'hostname': hostname, 'success': True}),
+                             qos=1)
+                return
+            last_error = RuntimeError(f"HTTP {status}: {payload[:200]}")
+        except Exception as e:
+            last_error = e
+            print(f"[Claim] Attempt {attempt} failed for {hostname}: {e}")
+        if attempt < max_attempts:
+            time.sleep(2)
+
+    print(f"[Claim] All attempts failed for {hostname}: {last_error}")
+    mqtt_publish(MQTT_TOPIC_CLAIM_RESPONSE,
+                 json.dumps({'hostname': hostname, 'success': False,
+                             'error': str(last_error)}),
+                 qos=1)
+
+
 def on_message(client, userdata, msg):
     topic = msg.topic
     if topic == MQTT_TOPIC_START:
@@ -256,6 +340,34 @@ def on_message(client, userdata, msg):
                 ).start()
         except Exception as e:
             print(f"[Confirm] Error parsing request: {e}")
+    elif topic == MQTT_TOPIC_CLAIM_REQUEST:
+        try:
+            data = json.loads(msg.payload.decode('utf-8'))
+            hostname = data.get('hostname')
+            creds    = data.get('creds')
+            if not hostname or not isinstance(creds, dict):
+                raise ValueError("hostname and creds (object) required")
+            threading.Thread(
+                target=claim_playbill,
+                args=(hostname, creds, client.publish),
+                daemon=True
+            ).start()
+        except Exception as e:
+            print(f"[Claim] Error parsing request: {e}")
+            # Best-effort error response — the requester is waiting on a
+            # response with this hostname; without one it times out.
+            try:
+                client.publish(
+                    MQTT_TOPIC_CLAIM_RESPONSE,
+                    json.dumps({
+                        'hostname': (data or {}).get('hostname') if 'data' in dir() else None,
+                        'success': False,
+                        'error': f"claim request malformed: {e}",
+                    }),
+                    qos=1,
+                )
+            except Exception:
+                pass
 
 
 def main():

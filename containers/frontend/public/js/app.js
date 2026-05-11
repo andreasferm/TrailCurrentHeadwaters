@@ -13,6 +13,7 @@ import { mapPage } from './pages/map.js';
 import { wizardPage } from './pages/wizard.js';
 import { configPage } from './pages/config.js';
 import { deploymentsPage } from './pages/deployments.js';
+import { playbillPage } from './pages/playbill.js';
 
 class App {
     constructor() {
@@ -23,6 +24,18 @@ class App {
         try {
             // Register service worker
             this.registerServiceWorker();
+
+            // iOS Safari ignores user-scalable=no in the viewport meta when
+            // gestures originate from inside the page. Belt-and-suspenders:
+            // explicitly cancel iOS's non-standard pinch (`gesturestart`)
+            // and the double-tap-zoom (`dblclick`) at the document level.
+            // CSS `touch-action: manipulation` on each control covers the
+            // common case; this catches anything that slips through.
+            const cancel = (e) => e.preventDefault();
+            document.addEventListener('gesturestart',  cancel, { passive: false });
+            document.addEventListener('gesturechange', cancel, { passive: false });
+            document.addEventListener('gestureend',    cancel, { passive: false });
+            document.addEventListener('dblclick',      cancel, { passive: false });
 
             // Set default theme
             document.documentElement.setAttribute('data-theme', 'dark');
@@ -102,6 +115,7 @@ class App {
             .register('map', mapPage)
             .register('config', configPage)
             .register('deployments', deploymentsPage)
+            .register('playbill', playbillPage)
             .register('settings', settingsPage);
 
         // Initialize navigation
@@ -280,6 +294,15 @@ class App {
                     </svg>
                     <span>Deploy</span>
                 </button>
+                <button class="nav-btn nav-overflow-item" data-page="playbill">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="6" width="20" height="13" rx="2"></rect>
+                        <line x1="8" y1="22" x2="16" y2="22"></line>
+                        <line x1="12" y1="19" x2="12" y2="22"></line>
+                        <path d="M7 3l5 3 5-3"></path>
+                    </svg>
+                    <span>Playbill</span>
+                </button>
                 <button class="nav-btn nav-overflow-item" data-page="settings">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
@@ -338,6 +361,15 @@ class App {
                                 <line x1="12" y1="22.08" x2="12" y2="12"></line>
                             </svg>
                             <span>Deploy</span>
+                        </button>
+                        <button class="nav-overflow-btn" data-page="playbill">
+                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="6" width="20" height="13" rx="2"></rect>
+                                <line x1="8" y1="22" x2="16" y2="22"></line>
+                                <line x1="12" y1="19" x2="12" y2="22"></line>
+                                <path d="M7 3l5 3 5-3"></path>
+                            </svg>
+                            <span>Playbill</span>
                         </button>
                         <button class="nav-overflow-btn" data-page="settings">
                             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

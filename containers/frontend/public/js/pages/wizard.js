@@ -392,56 +392,96 @@ export const wizardPage = {
         // Skip if already shown as discovered
         if (container.querySelector(`[data-hostname="${data.hostname}"]`)) return;
 
-        const displayName = moduleDisplayNames[data.type] || data.type;
+        const isPlaybill = (data.type || '').toLowerCase().trim() === 'playbill';
+        const displayName = isPlaybill ? 'Playbill' : (moduleDisplayNames[data.type] || data.type);
+
+        // Different detail line per onboard flow: MCUs have addr; Playbills
+        // don't (they identify by hostname + their MQTT slug).
+        const details = isPlaybill
+            ? `${data.hostname}${data.fw ? ` &middot; v${data.fw}` : ''}`
+            : `${data.hostname} &middot; addr ${data.addr} &middot; v${data.fw}`;
+
+        // Distinct button label so the user can tell at a glance what
+        // pressing it does (push creds vs. mark configured).
+        const btnLabel = isPlaybill ? 'Claim' : 'Confirm';
+
         const card = document.createElement('div');
-        card.className = 'discovered-module-card';
+        card.className = 'discovered-module-card' + (isPlaybill ? ' discovered-playbill' : '');
         card.dataset.hostname = data.hostname;
-        card.innerHTML = `
-            <div class="discovered-module-info">
-                <span class="discovered-module-type">${displayName}</span>
-                <span class="discovered-module-details">${data.hostname} &middot; addr ${data.addr} &middot; v${data.fw}</span>
-            </div>
-            <button class="wizard-btn wizard-btn-primary discovery-confirm-btn" data-hostname="${data.hostname}">
-                Confirm
-            </button>
-        `;
+
+        if (isPlaybill) {
+            // Pre-populate the name with whatever the Playbill is advertising
+            // (Settings device.name → mDNS TXT `name`), falling back to
+            // "Playbill" if nothing was provided. The claim flow sends this
+            // value back so a freshly imaged Playbill ends up with the user's
+            // chosen label — no second rename step needed after onboarding.
+            const seedName = data.name || 'Playbill';
+            card.innerHTML = `
+                <div class="discovered-module-info">
+                    <span class="discovered-module-type">${displayName}</span>
+                    <span class="discovered-module-details">${details}</span>
+                    <label class="discovered-playbill-name-label">
+                        Name this Playbill
+                        <input class="form-input discovered-playbill-name" type="text"
+                               maxlength="64" autocomplete="off"
+                               data-hostname="${data.hostname}"
+                               value="${escapeAttr(seedName)}"
+                               placeholder="e.g. Living Room">
+                    </label>
+                </div>
+                <button class="wizard-btn wizard-btn-primary discovery-confirm-btn" data-hostname="${data.hostname}">
+                    ${btnLabel}
+                </button>
+            `;
+        } else {
+            card.innerHTML = `
+                <div class="discovered-module-info">
+                    <span class="discovered-module-type">${displayName}</span>
+                    <span class="discovered-module-details">${details}</span>
+                </div>
+                <button class="wizard-btn wizard-btn-primary discovery-confirm-btn" data-hostname="${data.hostname}">
+                    ${btnLabel}
+                </button>
+            `;
+        }
 
         container.appendChild(card);
     },
 
     async confirmModule(hostname) {
-        const confirmBtn = document.querySelector(`.discovery-confirm-btn[data-hostname="${hostname}"]`);
+        const card = document.querySelector(`.discovered-module-card[data-hostname="${hostname}"]`);
+        const isPlaybill = !!(card && card.classList.contains('discovered-playbill'));
+        const confirmBtn = card && card.querySelector('.discovery-confirm-btn');
+        const inFlightLabel = isPlaybill ? 'Claiming…' : 'Confirming…';
+        const originalLabel = isPlaybill ? 'Claim'      : 'Confirm';
         if (confirmBtn) {
             confirmBtn.disabled = true;
-            confirmBtn.textContent = 'Confirming...';
+            confirmBtn.textContent = inFlightLabel;
         }
 
         try {
             await API.confirmModule(hostname);
 
-            // Add to local config
+            // Both MCU and Playbill onboarding paths now write into
+            // system_config.mcu_modules. Refresh from the server and let
+            // renderStep(2) drop the new module into the Added Modules
+            // section — same UX for everything we onboard.
             if (!systemConfig.mcu_modules) systemConfig.mcu_modules = [];
-
-            // Refresh mcu_modules from server (handles auto-naming/renaming)
             const freshConfig = await API.getSystemConfig();
             systemConfig.mcu_modules = freshConfig.mcu_modules || [];
 
-            // Remove from discovered list
-            const card = document.querySelector(`.discovered-module-card[data-hostname="${hostname}"]`);
             if (card) card.remove();
-
-            // Re-render the confirmed modules list
             this.renderStep(2);
 
         } catch (error) {
-            console.error('Failed to confirm module:', error);
+            console.error('Failed to confirm/claim device:', error);
             if (confirmBtn) {
                 confirmBtn.disabled = false;
-                confirmBtn.textContent = 'Confirm';
+                confirmBtn.textContent = originalLabel;
             }
             const errorEl = document.getElementById('discovery-error');
             if (errorEl) {
-                errorEl.textContent = 'Failed to confirm module: ' + error.message;
+                errorEl.textContent = `Failed to ${isPlaybill ? 'claim Playbill' : 'confirm module'}: ${error.message}`;
                 errorEl.classList.remove('hidden');
             }
         }

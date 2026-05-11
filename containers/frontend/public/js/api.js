@@ -211,6 +211,10 @@ class API {
         });
     }
 
+    static async getCaCertificate() {
+        return this.request('/settings/ca-certificate');
+    }
+
     // System Stats (CPU temp, utilization, fan speed)
     static async getSystemStats() {
         return this.request('/system-stats');

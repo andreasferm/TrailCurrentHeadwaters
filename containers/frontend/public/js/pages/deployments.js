@@ -58,7 +58,10 @@ export const deploymentsPage = {
                             <div class="password-form-group">
                                 <label for="deployment-version" class="password-label">Version</label>
                                 <input type="text" id="deployment-version" class="password-input"
-                                       placeholder="e.g. 1.2.3" required>
+                                       placeholder="e.g. 1.2.3" required
+                                       inputmode="decimal" autocomplete="off"
+                                       pattern="^\\d+\\.\\d+\\.\\d+$">
+                                <div id="deployment-version-error" class="password-message error hidden"></div>
                             </div>
                             <div class="password-form-group">
                                 <label for="deployment-file" class="password-label">Package File (.zip)</label>
@@ -201,10 +204,59 @@ export const deploymentsPage = {
 
     setupUploadForm() {
         const form = document.getElementById('deployment-upload-form');
+        const versionInput = document.getElementById('deployment-version');
+        const versionError = document.getElementById('deployment-version-error');
+
+        // Inline version validation — must be strict X.X.X (numeric only).
+        // Common rejections: leading 'v' (e.g. "v1.2.3"), semver
+        // pre-release suffixes ("1.2.3-rc1"), or single-segment / partial
+        // values. Show a friendly, specific message per failure mode and
+        // gate submit on validity.
+        const validateVersion = (showWhenEmpty = false) => {
+            const raw = versionInput.value;
+            const trimmed = raw.trim();
+            if (!trimmed) {
+                if (showWhenEmpty) setVersionError('Version is required.');
+                else clearVersionError();
+                return false;
+            }
+            if (/^v/i.test(trimmed)) {
+                setVersionError('Drop the “v” — version should be just numbers, e.g. 1.2.3');
+                return false;
+            }
+            if (!/^\d+\.\d+\.\d+$/.test(trimmed)) {
+                setVersionError('Use the format X.X.X (e.g. 1.2.3) — only numbers and two dots.');
+                return false;
+            }
+            clearVersionError();
+            return true;
+        };
+        const setVersionError = (msg) => {
+            if (!versionError) return;
+            versionError.textContent = msg;
+            versionError.classList.remove('hidden');
+            versionInput.setAttribute('aria-invalid', 'true');
+        };
+        const clearVersionError = () => {
+            if (!versionError) return;
+            versionError.textContent = '';
+            versionError.classList.add('hidden');
+            versionInput.removeAttribute('aria-invalid');
+        };
+
+        // Live feedback as the user types — clear errors the moment the
+        // value looks valid; surface them on blur even if mid-edit.
+        versionInput.addEventListener('input', () => validateVersion(false));
+        versionInput.addEventListener('blur',  () => validateVersion(true));
+
         form.addEventListener('submit', (e) => {
             e.preventDefault();
 
-            const version = document.getElementById('deployment-version').value;
+            if (!validateVersion(true)) {
+                versionInput.focus();
+                return;
+            }
+            const version = versionInput.value.trim();
             const fileInput = document.getElementById('deployment-file');
             const file = fileInput.files[0];
             if (!file) return;

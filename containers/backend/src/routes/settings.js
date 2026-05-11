@@ -1,5 +1,9 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
+
+const CA_CERT_PATH = path.join('/app/certs', 'ca.pem');
 
 const VALID_TIMEZONES = [
     'America/New_York',
@@ -76,6 +80,20 @@ module.exports = (db) => {
         } catch (error) {
             console.error('Error updating settings:', error);
             res.status(500).json({ error: 'Failed to update settings' });
+        }
+    });
+
+    // GET /api/settings/ca-certificate
+    router.get('/ca-certificate', async (req, res) => {
+        try {
+            const pem = await fs.promises.readFile(CA_CERT_PATH, 'utf8');
+            res.json({ certificate: pem, filename: 'ca.crt' });
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                return res.status(404).json({ error: 'CA certificate not found' });
+            }
+            console.error('Error reading CA certificate:', error);
+            res.status(500).json({ error: 'Failed to read CA certificate' });
         }
     });
 

@@ -199,6 +199,29 @@ export const settingsPage = {
                 </div>
             </div>
 
+            <!-- CA Certificate -->
+            <div class="card settings-item-vertical">
+                <div class="settings-item-header">
+                    <span class="settings-label">CA Certificate</span>
+                    <p class="settings-description">Trust this CA on other MQTT/HTTPS clients (Home Assistant, mosquitto_sub, browsers) to talk to this system securely</p>
+                </div>
+                <div class="ca-cert-container">
+                    <textarea id="ca-cert-content" class="password-input ca-cert-textarea"
+                              readonly
+                              placeholder="Loading certificate..."></textarea>
+                    <div id="ca-cert-message" class="password-message hidden"></div>
+                    <div class="ca-cert-actions">
+                        <button class="password-submit-btn" id="copy-ca-cert-btn" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="vertical-align: middle; margin-right: 6px;">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            Copy to Clipboard
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Change Password -->
             <div class="card settings-item-vertical">
                 <div class="settings-item-header">
@@ -373,6 +396,17 @@ export const settingsPage = {
 
         // Load existing API keys
         this.loadApiKeys();
+
+        // Load CA certificate
+        this.loadCaCertificate();
+
+        // Copy CA certificate button
+        const copyCaBtn = document.getElementById('copy-ca-cert-btn');
+        if (copyCaBtn) {
+            copyCaBtn.addEventListener('click', async () => {
+                await this.handleCopyCaCertificate();
+            });
+        }
 
         // Refresh app button
         const refreshBtn = document.getElementById('refresh-app-btn');
@@ -810,6 +844,67 @@ export const settingsPage = {
             messageEl.textContent = message;
             messageEl.classList.remove('hidden', 'success', 'error');
             messageEl.classList.add(type);
+        }
+    },
+
+    async loadCaCertificate() {
+        const textarea = document.getElementById('ca-cert-content');
+        const copyBtn = document.getElementById('copy-ca-cert-btn');
+        if (!textarea) return;
+
+        try {
+            const result = await API.getCaCertificate();
+            textarea.value = result.certificate;
+            if (copyBtn) copyBtn.disabled = false;
+        } catch (error) {
+            textarea.value = '';
+            textarea.placeholder = 'Failed to load certificate';
+            this.showCaCertMessage(error.message || 'Failed to load CA certificate', 'error');
+        }
+    },
+
+    async handleCopyCaCertificate() {
+        const textarea = document.getElementById('ca-cert-content');
+        const copyBtn = document.getElementById('copy-ca-cert-btn');
+        if (!textarea || !textarea.value) return;
+
+        try {
+            await navigator.clipboard.writeText(textarea.value);
+            this.showCaCertMessage('Certificate copied to clipboard', 'success');
+        } catch (error) {
+            // Fallback: select the text so the user can copy manually
+            textarea.focus();
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                this.showCaCertMessage('Certificate copied to clipboard', 'success');
+            } catch {
+                this.showCaCertMessage('Copy failed — select the text and copy manually', 'error');
+            }
+        }
+
+        // Brief visual feedback on the button
+        if (copyBtn) {
+            const originalHTML = copyBtn.innerHTML;
+            copyBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="vertical-align: middle; margin-right: 6px;">
+                    <path d="M20 6L9 17l-5-5"></path>
+                </svg>
+                Copied
+            `;
+            setTimeout(() => { copyBtn.innerHTML = originalHTML; }, 2000);
+        }
+    },
+
+    showCaCertMessage(message, type) {
+        const messageEl = document.getElementById('ca-cert-message');
+        if (messageEl) {
+            messageEl.textContent = message;
+            messageEl.classList.remove('hidden', 'success', 'error');
+            messageEl.classList.add(type);
+            if (type === 'success') {
+                setTimeout(() => messageEl.classList.add('hidden'), 3000);
+            }
         }
     },
 

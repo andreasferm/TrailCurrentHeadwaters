@@ -821,12 +821,14 @@ export const configPage = {
         // Populate module types first so the select has the right options
         this.populateModuleTypes();
 
-        // Populate form with module data — type, name, and hostname are read-only
-        // (set by discovery, not user input)
+        // Populate form with module data. Type + hostname are set by
+        // discovery and can't be changed without re-onboarding, so they
+        // stay read-only. Name is the user-facing label — editable here
+        // is the whole point of the edit dialog.
         document.getElementById('module-type').value = module.type;
         document.getElementById('module-type').disabled = true;
         document.getElementById('module-name').value = module.name;
-        document.getElementById('module-name').disabled = true;
+        document.getElementById('module-name').disabled = false;
         document.getElementById('module-hostname').value = module.hostname || '';
         document.getElementById('module-hostname').disabled = true;
 

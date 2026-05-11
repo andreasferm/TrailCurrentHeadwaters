@@ -15,6 +15,16 @@ const MQTT_RELAYS = 'relays';
 const MQTT_LEVEL = 'level';
 const MQTT_WATER = 'water';
 const MQTT_DEPLOYMENT = 'deployment';
+// Playbill in-rig entertainment node — owns radio/livetv/transport state and
+// publishes per-device retained status. Multiple Playbills can coexist on one
+// rig; topics carry a <deviceId> segment so observers can address one or all.
+//
+// Topic shape (mirrored from controller/src/mqtt-bridge.js):
+//   local/playbill/<deviceId>/<feature>/status   (retained)
+//   local/playbill/<deviceId>/<feature>/command
+//   local/playbill/all/<feature>/command         (broadcast to every Playbill)
+//   local/playbill/<deviceId>/system/status      (presence + LWT, retained)
+const MQTT_PLAYBILL = 'playbill';
 
 // MQTT Message Types
 const MSG_COMMAND = 'command';
@@ -48,6 +58,12 @@ const TOPICS = {
     DISCOVERY_BROWSE_FOUND: 'discovery/browse/found',
     DISCOVERY_CONFIRM_REQUEST: 'discovery/confirm/request',
     DISCOVERY_CONFIRM_RESPONSE: 'discovery/confirm/response',
+    // Playbill claim flow — the rig POSTs broker credentials to a freshly
+    // discovered Playbill so it can connect to the MQTT broker. Distinct
+    // from confirm/* (which is an MCU GET marker) because the payload shape
+    // and the receiver semantics are different.
+    DISCOVERY_CLAIM_REQUEST: 'discovery/claim/request',
+    DISCOVERY_CLAIM_RESPONSE: 'discovery/claim/response',
     SYSTEM_STATS: `${MQTT_ROOT}/system/stats`,
     DEPLOYMENT_AVAILABLE: `${MQTT_ROOT}/${MQTT_DEPLOYMENT}/available`,
     DEPLOYMENT_STATUS: `${MQTT_ROOT}/${MQTT_DEPLOYMENT}/${MSG_STATUS}`,
@@ -56,6 +72,11 @@ const TOPICS = {
     WIRELESS_DISCOVERY_TRIGGER: 'local/discovery/trigger',
     WIRELESS_OTA_TRIGGER: 'local/ota/trigger',
     CONFIG_REQUEST: 'local/config/request',
+    // Match every Playbill device + feature status (e.g. radio, livetv,
+    // transport, system). The handler unpacks deviceId and feature from the
+    // topic segments — we don't need separate constants per feature, which
+    // keeps the surface trivially extensible as more features land.
+    PLAYBILL_STATUS_ALL: `${MQTT_ROOT}/${MQTT_PLAYBILL}/+/+/${MSG_STATUS}`,
 };
 
 class MqttService {
@@ -298,6 +319,15 @@ class MqttService {
             }
         });
 
+        // Subscribe to Playbill claim responses (from host-side proxy)
+        this.client.subscribe(TOPICS.DISCOVERY_CLAIM_RESPONSE, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to discovery claim response:', err);
+            } else {
+                console.log('Subscribed to discovery claim response topic');
+            }
+        });
+
         // Subscribe to proximity events/status (bridged from Farwatch cloud)
         this.client.subscribe(TOPICS.PROXIMITY_EVENT, (err) => {
             if (err) {
@@ -322,6 +352,21 @@ class MqttService {
                 console.log('Subscribed to deployment status topic');
             }
         });
+
+        // Subscribe to every Playbill device's per-feature status. The
+        // controller publishes retained payloads so a late-joining PWA gets
+        // the current state on subscribe without polling.
+        this.client.subscribe(TOPICS.PLAYBILL_STATUS_ALL, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to playbill status:', err);
+            } else {
+                console.log('Subscribed to playbill status topic');
+            }
+        });
+
+        // Track known Playbills so the WebSocket layer can emit a stable
+        // "presence list" when a PWA first connects. Cleared on reconnect.
+        if (!this.playbillDevices) this.playbillDevices = new Map();
     }
 
     handleMessage(topic, message) {
@@ -335,6 +380,10 @@ class MqttService {
             }
             if (topic === TOPICS.DISCOVERY_CONFIRM_RESPONSE) {
                 this.handleDiscoveryConfirmResponse(payload);
+                return;
+            }
+            if (topic === TOPICS.DISCOVERY_CLAIM_RESPONSE) {
+                this.handleDiscoveryClaimResponse(payload);
                 return;
             }
 
@@ -396,6 +445,9 @@ class MqttService {
                 this.handleProximityEvent(payload);
             } else if (parts[1] === 'proximity' && parts[2] === 'status') {
                 this.handleProximityStatus(payload);
+            } else if (parts[1] === MQTT_PLAYBILL && parts.length === 5 && parts[4] === MSG_STATUS) {
+                // local/playbill/<deviceId>/<feature>/status
+                this.handlePlaybillStatus(parts[2], parts[3], payload);
             }
         } catch (error) {
             console.error('Error handling MQTT message:', error);
@@ -1229,6 +1281,34 @@ class MqttService {
         handleConfirmResponse(payload);
     }
 
+    // Handle claim response from host-side proxy (Playbill credentials push)
+    handleDiscoveryClaimResponse(payload) {
+        console.log('[Discovery] Claim response:', payload);
+        const { handleClaimResponse } = require('./routes/discovery');
+        if (typeof handleClaimResponse === 'function') handleClaimResponse(payload);
+    }
+
+    // Ask the host-side proxy to POST broker credentials to a freshly
+    // discovered Playbill. The proxy hits http://<hostname>.local/discovery/claim
+    // with the JSON body inside `creds`. Don't log the creds object.
+    publishDiscoveryClaimRequest(hostname, creds) {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish claim request');
+            return false;
+        }
+        if (!hostname || !creds || typeof creds !== 'object') {
+            console.warn('[Discovery] publishDiscoveryClaimRequest: hostname + creds required');
+            return false;
+        }
+        console.log(`[Discovery] Sending claim to ${hostname}`);
+        this.client.publish(
+            TOPICS.DISCOVERY_CLAIM_REQUEST,
+            JSON.stringify({ hostname, creds }),
+            { qos: 1 },
+        );
+        return true;
+    }
+
     // Ask the host-side proxy to confirm a module
     publishDiscoveryConfirmRequest(hostname) {
         if (!this.connected) {
@@ -1270,6 +1350,108 @@ class MqttService {
         }
         console.log('[Discovery] Stopping mDNS browse');
         this.client.publish(TOPICS.DISCOVERY_BROWSE_STOP, '{}', { qos: 1 });
+        return true;
+    }
+
+    // ── Playbill (in-rig entertainment node) ────────────────────────────
+    //
+    // The Playbill controller publishes per-feature retained status on
+    // `local/playbill/<deviceId>/<feature>/status`. We fan those out to the
+    // PWA over the existing WebSocket using a single envelope event —
+    // `playbill_status` with `{deviceId, feature, payload}` — so adding new
+    // Playbill features (transport, livetv, sources, etc.) requires zero
+    // backend changes here. The PWA decides which features it cares about.
+    //
+    // The `system` feature is also emitted as `playbill_presence` so the
+    // PWA can keep a discovery list cheaply (and react to LWT-driven
+    // offline transitions without having to look inside the payload).
+    handlePlaybillStatus(deviceId, feature, payload) {
+        if (!deviceId || !feature) return;
+
+        // Cache every feature's most recent payload per device. The Playbill
+        // controller publishes most feature topics edge-triggered (radio
+        // only republishes when state.radio changes, not periodically), so
+        // a PWA loading after the fact relies on us having the last value.
+        // Without this, the PWA's `state.statusByDevice` map would only get
+        // populated from new WS events — and if the Playbill's state hasn't
+        // moved since the previous publish, no new event ever fires.
+        if (!this.playbillStatusByDevice) this.playbillStatusByDevice = new Map();
+        let perDevice = this.playbillStatusByDevice.get(deviceId);
+        if (!perDevice) {
+            perDevice = new Map();
+            this.playbillStatusByDevice.set(deviceId, perDevice);
+        }
+        perDevice.set(feature, payload);
+
+        // Update local presence cache. The retained `system` topic carries
+        // {online, name, hostname, version, ...}; everything else is feature
+        // state. Cached values are returned to fresh WebSocket connections
+        // via the wsClient `playbill_snapshot` event (added below).
+        if (feature === 'system') {
+            if (payload && payload.online === false) {
+                // LWT-driven offline transition. Keep the last known name/version
+                // so the PWA can still render the device row as greyed-out.
+                const prior = this.playbillDevices.get(deviceId) || {};
+                this.playbillDevices.set(deviceId, { ...prior, ...payload, deviceId });
+            } else {
+                this.playbillDevices.set(deviceId, { ...payload, deviceId });
+            }
+            if (this.broadcast) {
+                this.broadcast('playbill_presence', {
+                    deviceId,
+                    ...payload,
+                });
+            }
+        }
+
+        if (this.broadcast) {
+            this.broadcast('playbill_status', {
+                deviceId,
+                feature,
+                payload,
+                ts: Date.now(),
+            });
+        }
+    }
+
+    // Returns the current presence snapshot — used by the REST route so a
+    // freshly loaded PWA can list known Playbills without waiting for a
+    // retained MQTT publish to arrive on its WebSocket. Each device entry
+    // includes a `statusByFeature` map of the last seen payload for every
+    // feature topic, so the PWA can hydrate widgets (volume slider, radio
+    // tab, etc.) on first paint without depending on an immediate retained
+    // republish from the broker.
+    listPlaybillDevices() {
+        if (!this.playbillDevices) return [];
+        return Array.from(this.playbillDevices.values()).map((d) => {
+            const perDevice = this.playbillStatusByDevice && this.playbillStatusByDevice.get(d.deviceId);
+            return {
+                ...d,
+                statusByFeature: perDevice ? Object.fromEntries(perDevice) : {},
+            };
+        });
+    }
+
+    // Publish a command to a specific Playbill (or to all of them via the
+    // reserved 'all' deviceId). Topic shape mirrors what the controller's
+    // mqtt-bridge.js subscribes to. Payload must be a JSON-serializable
+    // object with at minimum an `action` string; the controller dispatches
+    // through the command bus same as IPC-arriving commands.
+    publishPlaybillCommand(deviceId, feature, payload) {
+        if (!this.connected) {
+            console.warn('MQTT not connected, cannot publish Playbill command');
+            return false;
+        }
+        if (!deviceId || !feature) {
+            console.warn('publishPlaybillCommand: deviceId and feature required');
+            return false;
+        }
+        if (!payload || typeof payload !== 'object' || typeof payload.action !== 'string') {
+            console.warn('publishPlaybillCommand: payload must include a string action');
+            return false;
+        }
+        const topic = `${MQTT_ROOT}/${MQTT_PLAYBILL}/${deviceId}/${feature}/${MSG_COMMAND}`;
+        this.client.publish(topic, JSON.stringify(payload), { qos: 1 });
         return true;
     }
 
