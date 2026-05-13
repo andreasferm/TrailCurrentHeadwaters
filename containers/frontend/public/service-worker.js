@@ -34,6 +34,8 @@ const STATIC_ASSETS = [
     '/js/pages/playbill/radio.js',
     '/js/pages/playbill/volume.js',
     '/js/pages/playbill/remote.js',
+    '/js/pages/playbill/youtube.js',
+    '/docs/playbill-youtube-setup.html',
     '/apple-touch-icon.png',
     '/icons/icon-180.png',
     '/icons/icon-192.png',

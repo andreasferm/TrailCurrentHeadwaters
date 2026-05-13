@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>Setting up YouTube on Playbill — TrailCurrent</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/css/theme.css">
+<style>
+  /* Layout, leaning on the PWA's theme tokens so the doc reads as native. */
+  html, body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    margin: 0;
+    padding: 0;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { padding: 32px 20px 80px; }
+  main { max-width: 720px; margin: 0 auto; }
+  .doc-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 14px;
+    margin-bottom: 18px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+  }
+  .doc-back:hover { color: var(--text-primary); border-color: var(--primary); }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0 0 8px;
+    color: var(--text-primary);
+  }
+  .doc-subtitle {
+    color: var(--text-secondary);
+    margin: 0 0 28px;
+    font-size: 15px;
+  }
+  h2 {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 36px 0 10px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+    color: var(--text-primary);
+  }
+  h2:first-of-type { border-top: none; padding-top: 0; }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p { margin: 10px 0; color: var(--text-primary); }
+  ol, ul { padding-left: 22px; }
+  li { margin: 6px 0; }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, kbd {
+    font-family: 'Courier New', monospace;
+    font-size: 0.92em;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1px 6px;
+  }
+  pre {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font-size: 13px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid var(--border-color);
+    padding: 8px 10px;
+    text-align: left;
+  }
+  th {
+    background: var(--bg-card);
+    font-weight: 600;
+  }
+  .callout {
+    border-left: 3px solid var(--info);
+    background: color-mix(in srgb, var(--info) 10%, transparent);
+    padding: 12px 14px;
+    border-radius: 0 10px 10px 0;
+    margin: 16px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+  .callout.warning {
+    border-left-color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+  }
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: var(--btn-text);
+    font-size: 12px;
+    font-weight: 700;
+    margin-right: 8px;
+    vertical-align: 1px;
+  }
+  .toc {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin: 16px 0 28px;
+  }
+  .toc h4 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+  }
+  .toc ol { margin: 0; padding-left: 22px; }
+  .toc a { color: var(--text-primary); }
+  .toc a:hover { color: var(--primary); }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 36px 0;
+  }
+  strong { color: var(--text-primary); }
+</style>
+</head>
+<body data-theme="dark">
+<main>
+  <a class="doc-back" href="/#playbill">← Back to Playbill</a>
+
+  <h1>Setting up YouTube on Playbill</h1>
+  <p class="doc-subtitle">
+    A one-time, 10-minute setup that lets YouTube work on your Playbill using
+    your own Google account.
+  </p>
+
+  <div class="callout">
+    <strong>Why this exists.</strong> Google reserves "TV-style YouTube clients" for OEM partners
+    (Roku, Apple, Samsung, etc.). Smaller third-party clients like Playbill get
+    rejected at verification, so we use the same workaround Kodi's YouTube
+    add-on uses — each user runs their own one-person Google Cloud project.
+    There's no shared key for Google to revoke, no quota to share, no verification
+    queue, and your data never leaves your rig.
+  </div>
+
+  <div class="toc">
+    <h4>What you'll do</h4>
+    <ol>
+      <li><a href="#step1">Create a Google Cloud project</a></li>
+      <li><a href="#step2">Enable the YouTube Data API</a></li>
+      <li><a href="#step3">Configure the OAuth consent screen</a></li>
+      <li><a href="#step4">Add yourself as a Test User</a></li>
+      <li><a href="#step5">Create the OAuth 2.0 Client ID</a></li>
+      <li><a href="#step6">Create an API Key</a></li>
+      <li><a href="#step7">Paste the three values into Playbill</a></li>
+    </ol>
+  </div>
+
+  <h3>What you'll need</h3>
+  <ul>
+    <li>A <strong>Google account</strong> (Gmail is fine).</li>
+    <li>A web browser on your phone or laptop. Easier on a regular screen than on the Playbill itself.</li>
+    <li>About <strong>10 minutes</strong>.</li>
+  </ul>
+  <p>You won't be charged anything. Everything you set up uses Google Cloud's free tier.</p>
+
+  <hr>
+
+  <h2 id="step1"><span class="step-num">1</span>Create a Google Cloud project</h2>
+  <ol>
+    <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a>.</li>
+    <li>Sign in with your Google account.</li>
+    <li>At the top of the page, click the <strong>project picker</strong> (next to "Google Cloud"). A modal opens.</li>
+    <li>Click <strong>NEW PROJECT</strong> in the top-right of the modal.</li>
+    <li>Set <strong>Project name</strong> to anything you want — e.g. <code>My Playbill</code>.</li>
+    <li>Click <strong>CREATE</strong>.</li>
+    <li>Wait ~30 seconds. The project picker refreshes with your new project selected.</li>
+  </ol>
+
+  <h2 id="step2"><span class="step-num">2</span>Enable the YouTube Data API v3</h2>
+  <ol>
+    <li>Left nav → <strong>APIs &amp; Services → Library</strong>. (If you don't see the side nav, click the ☰ icon top-left.)</li>
+    <li>Search for <code>YouTube Data API v3</code>.</li>
+    <li>Click the result.</li>
+    <li>Click <strong>ENABLE</strong>. Wait ~10 seconds.</li>
+  </ol>
+
+  <h2 id="step3"><span class="step-num">3</span>Configure the OAuth consent screen</h2>
+  <ol>
+    <li>Left nav → <strong>APIs &amp; Services → OAuth consent screen</strong>.</li>
+    <li><strong>User Type:</strong> select <strong>External</strong>, then click <strong>CREATE</strong>.</li>
+    <li>Fill in the required fields:
+      <ul>
+        <li><strong>App name:</strong> anything (e.g. <code>My Playbill</code>).</li>
+        <li><strong>User support email:</strong> your Gmail.</li>
+        <li><strong>Developer contact information:</strong> your Gmail.</li>
+      </ul>
+    </li>
+    <li>Click <strong>SAVE AND CONTINUE</strong> through the remaining screens until you're back at the overview. You don't need to add scopes or change anything else.</li>
+  </ol>
+
+  <h2 id="step4"><span class="step-num">4</span>Add yourself as a Test User</h2>
+  <p>Still on the OAuth consent screen page:</p>
+  <ol>
+    <li>Find the <strong>Test users</strong> section. Click <strong>+ ADD USERS</strong>.</li>
+    <li>Type the Gmail address you'll be signing into YouTube with. (Can be the same as the developer email, or other family Gmail accounts — up to 100 total.)</li>
+    <li>Click <strong>SAVE</strong>.</li>
+  </ol>
+  <div class="callout">
+    If you skip this, you'll see a <em>"Google hasn't verified this app"</em> warning when signing in.
+    You can click <strong>Advanced → Go to (unsafe)</strong> to proceed, but it's nicer to just add yourself here.
+  </div>
+
+  <h2 id="step5"><span class="step-num">5</span>Create the OAuth 2.0 Client ID</h2>
+  <ol>
+    <li>Left nav → <strong>APIs &amp; Services → Credentials</strong>.</li>
+    <li>Click <strong>+ CREATE CREDENTIALS</strong>, then choose <strong>OAuth client ID</strong>.</li>
+    <li><strong>Application type:</strong> select <strong>TVs and Limited Input devices</strong>.</li>
+    <li><strong>Name:</strong> anything (e.g. <code>Playbill TV client</code>). Click <strong>CREATE</strong>.</li>
+    <li>A modal pops up with your <strong>Client ID</strong> and <strong>Client secret</strong>. Leave that modal open — you'll paste both into Playbill in step 7.</li>
+  </ol>
+
+  <h2 id="step6"><span class="step-num">6</span>Create an API Key</h2>
+  <ol>
+    <li>Open a new browser tab to the same Credentials page: <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">console.cloud.google.com/apis/credentials</a>.</li>
+    <li>Click <strong>+ CREATE CREDENTIALS → API key</strong>.</li>
+    <li>A modal pops up with your <strong>API key</strong>. Copy it.</li>
+    <li>Click <strong>EDIT API KEY</strong> in that modal (or close it and click the pencil icon next to the new key in the list).</li>
+    <li>Under <strong>API restrictions</strong>:
+      <ul>
+        <li>Select <strong>Restrict key</strong>.</li>
+        <li>In the dropdown, choose <strong>YouTube Data API v3</strong>.</li>
+      </ul>
+    </li>
+    <li>Click <strong>SAVE</strong>.</li>
+  </ol>
+
+  <h2 id="step7"><span class="step-num">7</span>Paste the three values into Playbill</h2>
+  <p>You should now have:</p>
+  <ul>
+    <li>A <strong>Client ID</strong> (long string ending in <code>.apps.googleusercontent.com</code>)</li>
+    <li>A <strong>Client secret</strong> (~24 characters)</li>
+    <li>An <strong>API key</strong> (~39 characters starting with <code>AIza</code>)</li>
+  </ul>
+
+  <p>From the Headwaters PWA on your phone:</p>
+  <ol>
+    <li>Open the PWA, tap the <strong>Playbill</strong> nav icon.</li>
+    <li>Tap the <strong>YouTube</strong> tab.</li>
+    <li>Paste all three values into the form.</li>
+    <li>Tap <strong>Save</strong>.</li>
+    <li>Tap <strong>Sign in</strong>. A 6-digit code appears.</li>
+    <li>On your phone (or any other device), open <a href="https://youtube.com/activate" target="_blank" rel="noopener">youtube.com/activate</a> and enter the code, then sign in with the Gmail account you added as a Test User in step 4.</li>
+    <li>After Google says "device connected," Playbill flips to <em>Signed in as &lt;your channel name&gt;</em>.</li>
+  </ol>
+  <p>You're done. YouTube under <strong>Sources</strong> on Playbill now works.</p>
+
+  <hr>
+
+  <h2>What to expect afterward</h2>
+
+  <h3>Quota</h3>
+  <p>Google gives each Cloud project <strong>10,000 "units" per day</strong> of YouTube Data API quota. Some reference costs:</p>
+  <table>
+    <thead><tr><th>Operation</th><th>Cost</th></tr></thead>
+    <tbody>
+      <tr><td>Search</td><td>100 units</td></tr>
+      <tr><td>Browse a channel page</td><td>~5 units</td></tr>
+      <tr><td>Load a playlist</td><td>~5 units</td></tr>
+      <tr><td>Start playback</td><td>0 units (stream resolution uses yt-dlp)</td></tr>
+    </tbody>
+  </table>
+  <p>A typical viewing day is 100–500 units. You'd need hundreds of searches a day to run out. If you ever do hit the limit, new searches stop working until quota resets at midnight Pacific time; already-loaded content and playback continue.</p>
+  <p>You can request a quota increase (free, ~1 business day) at <a href="https://console.cloud.google.com/iam-admin/quotas" target="_blank" rel="noopener">console.cloud.google.com/iam-admin/quotas</a> — filter for "YouTube Data API."</p>
+
+  <h3>Re-consent every 7 days</h3>
+  <p>While your OAuth project is in <strong>Testing</strong> mode (which is where it stays — you don't need to publish it), Google requires re-consent every <strong>7 days</strong>. In practice that means about once a week, Playbill's YouTube tab shows <em>"Session expired — please sign in again."</em> Tap <strong>Sign in</strong> and walk through the 6-digit code flow.</p>
+  <p>There's no way to remove this — the only alternative would be Google verification, which they don't grant to TV-style YouTube clients. Every third-party YouTube client lives with this.</p>
+
+  <h3>Multiple Gmail accounts</h3>
+  <p>You can add up to 100 test users in step 4. If your family has separate accounts and you want each to be able to sign in (subscriptions, watch history), add all their emails as test users on the same OAuth project, then sign in/out from the Playbill YouTube tab as needed.</p>
+
+  <h3>Multiple Playbills</h3>
+  <p>If you have more than one Playbill on the rig, each one needs its own credential entry — paste the same three values into each. Quota is shared because they share one Google Cloud project.</p>
+
+  <hr>
+
+  <h2>Troubleshooting</h2>
+
+  <h3>"This app isn't verified" / "Google hasn't verified this app"</h3>
+  <p>You skipped step 4 (adding yourself as a Test User), or you're signing in with a different Gmail than the one you added. Go back to step 4 and add the email you're trying to sign in with.</p>
+
+  <h3>"Sign in failed: invalid_grant" / "Token expired"</h3>
+  <p>The 7-day re-consent window elapsed. Tap <strong>Sign in</strong> again and complete the device-code flow.</p>
+
+  <h3>"Quota exceeded"</h3>
+  <p>You burned through 10,000 units in one day (rare). Wait until midnight Pacific time or request a quota increase per the link above.</p>
+
+  <h3>"Invalid client" / "Client ID not found"</h3>
+  <p>Double-check the Client ID was pasted in full and ends in <code>.apps.googleusercontent.com</code>. The Cloud Console truncates the display in some views; click the row in the Credentials list to see the full value.</p>
+
+  <h3>"API key invalid"</h3>
+  <p>Check that the API key starts with <code>AIza</code>. Confirm under <strong>API restrictions</strong> you selected <strong>YouTube Data API v3</strong> (not "Don't restrict key"). Unrestricted keys can be rejected by Google.</p>
+
+  <h3>The YouTube tab in Playbill says "Configure your Google Cloud credentials" but I already pasted them</h3>
+  <p>Each Playbill stores its own credentials. If you set them up on Playbill A and a different Playbill B shows the same message, paste the values into Playbill B too.</p>
+
+  <hr>
+
+  <h2>What's stored where</h2>
+  <table>
+    <thead><tr><th>Where</th><th>What</th></tr></thead>
+    <tbody>
+      <tr><td>Google Cloud Console (your account)</td><td>OAuth client, API key, your project quota</td></tr>
+      <tr><td>Playbill, file mode 0600</td><td><code>~/.config/trailcurrent-playbill/sources/youtube/client.json</code> — clientId, clientSecret, apiKey</td></tr>
+      <tr><td>Playbill, file mode 0600</td><td><code>~/.config/trailcurrent-playbill/sources/youtube/tokens.json</code> — OAuth refresh + access tokens</td></tr>
+      <tr><td>Headwaters (cloud)</td><td>Nothing. None of this leaves your rig.</td></tr>
+    </tbody>
+  </table>
+  <p>Playbill talks directly to Google with your credentials; nothing is proxied through Headwaters or any other service.</p>
+
+  <hr>
+
+  <h2>Why we have to do it this way</h2>
+  <p>The short version: Google's API services policy explicitly bans <em>"duplicating YouTube's experience"</em> via the public YouTube Data API. The verification process for an app like Playbill — a TV-style YouTube client that isn't an officially-partnered TV platform — gets rejected. This isn't unique to us: Kodi's YouTube addon, Plex's third-party YouTube channels, FreeTube, ViewTube, and every other open-source YouTube client lives under the same constraint.</p>
+  <p>The "bring your own Google Cloud project" approach sidesteps the issue entirely. From Google's perspective, each Playbill owner is a developer building a one-user app for themselves. There's no shared client to verify, no quota to share, no central app for policy enforcement to flag.</p>
+  <p>It's clunky, but it's the only path that doesn't rely on either:</p>
+  <ul>
+    <li>A Smart-TV-platform partnership we'd need to be Sony-sized to negotiate, or</li>
+    <li>An ad-stripping reimplementation that violates YouTube's terms of service and breaks every few months.</li>
+  </ul>
+  <p>Most users finish this setup in 10 minutes and never think about it again.</p>
+
+  <a class="doc-back" href="/#playbill" style="margin-top: 32px;">← Back to Playbill</a>
+</main>
+</body>
+</html>

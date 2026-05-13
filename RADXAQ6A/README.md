@@ -138,8 +138,7 @@ to land the Q6A BOM at or below the equivalent Pi-based Headwaters BOM:
 
 1. **4 GB Dragon Q6A with on-board NVMe** vs. 4 GB CM5 + NVMe-capable carrier
    + separate M.2 drive — three parts collapse into one module.
-2. **Plain Waveshare RS485 CAN HAT** (the 8 MHz MCP2515 board this image
-   targets) is noticeably cheaper than the
+2. **Plain Waveshare RS485 CAN HAT** is noticeably cheaper than the
    Waveshare RS485 CAN HAT (B) used on the CM5 target.
 3. **On-board 12 V input** on the Q6A — no 12→5 V buck regulator or USB-C PD
    path required, shaving another component off the power stage.

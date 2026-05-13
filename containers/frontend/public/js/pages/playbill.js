@@ -21,6 +21,7 @@ import { API, wsClient } from '../api.js';
 import { radioTab } from './playbill/radio.js';
 import { volumeWidget } from './playbill/volume.js';
 import { remoteTab }    from './playbill/remote.js';
+import { youtubeTab }   from './playbill/youtube.js';
 
 // Feature tab registry. Order = rendered order in the segmented control.
 // Each tab is an object with:
@@ -36,6 +37,7 @@ const TABS = [
     radioTab,
     placeholderTab('livetv',    'Live TV',     'Channel list + tuner control arrive in the Live TV phase.'),
     remoteTab,
+    youtubeTab,
 ];
 
 function placeholderTab(id, label, hint) {

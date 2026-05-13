@@ -4952,3 +4952,149 @@ a,
 input[type="range"] {
     touch-action: pan-x;
 }
+
+/* ─── Playbill YouTube settings tab ─────────────────────────────────── */
+
+.playbill-youtube {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding-top: 12px;
+}
+.playbill-youtube-card {
+    width: 100%;
+    max-width: 520px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 20px;
+}
+.playbill-youtube-card-active {
+    border-color: var(--primary);
+    box-shadow: var(--glow-primary);
+}
+.playbill-youtube-title {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.playbill-youtube-blurb {
+    margin: 0 0 12px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.5;
+}
+.playbill-youtube-blurb-muted {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+.playbill-youtube-blurb a {
+    color: var(--primary);
+    text-decoration: none;
+}
+.playbill-youtube-blurb a:hover { text-decoration: underline; }
+
+/* Prominent "Open the setup guide" link on the not-configured screen.
+   Block-style so it stands out from the surrounding paragraph text. */
+.playbill-youtube-doc-link {
+    display: inline-block;
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border-color));
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+    color: var(--primary) !important;
+    font-weight: 600;
+    text-decoration: none !important;
+    transition: background 0.12s, box-shadow 0.15s;
+}
+.playbill-youtube-doc-link:hover {
+    background: color-mix(in srgb, var(--primary) 18%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+.playbill-youtube-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.playbill-youtube-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+.playbill-youtube-field .form-input {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+}
+
+.playbill-youtube-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+.playbill-youtube-actions .playbill-btn { min-width: 110px; }
+
+.playbill-youtube-error {
+    margin: 8px 0 0;
+    color: var(--danger);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+/* Big device-flow code while signing in. Monospace and spaced so it's
+   readable from across the room. */
+.playbill-youtube-code {
+    font-family: 'Courier New', monospace;
+    font-size: 44px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-align: center;
+    margin: 16px 0 12px;
+    color: var(--primary);
+    text-shadow: 0 0 18px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+.playbill-youtube-countdown {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 0 0 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Signed-in account row */
+.playbill-youtube-account {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0 14px;
+}
+.playbill-youtube-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--bg-secondary);
+}
+.playbill-youtube-account-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.playbill-youtube-loading {
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 24px;
+}
+
+@media (max-width: 480px) {
+    .playbill-youtube-code { font-size: 36px; letter-spacing: 0.14em; }
+    .playbill-youtube-card { padding: 16px; }
+}

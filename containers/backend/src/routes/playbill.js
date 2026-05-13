@@ -28,7 +28,7 @@ const mqttService = require('../mqtt');
 const DEVICE_ID_RE  = /^[a-z0-9_-]{1,32}$/;
 // Limit features to the small known set so a PWA bug can't publish on an
 // arbitrary topic path. Add to this list as Playbill grows.
-const KNOWN_FEATURES = new Set(['radio', 'transport', 'livetv', 'volume', 'system', 'nav', 'source']);
+const KNOWN_FEATURES = new Set(['radio', 'transport', 'livetv', 'volume', 'system', 'nav', 'source', 'youtube']);
 
 module.exports = () => {
     // GET /api/playbill/devices

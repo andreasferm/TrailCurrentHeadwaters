@@ -3,15 +3,6 @@
 // Enable MCP2515 SPI CAN controller on SPI12 CS0 with 12 MHz external clock.
 // Target: Radxa Dragon Q6A (QCS6490) + Waveshare RS485 CAN HAT.
 //
-// The Waveshare "RS485 CAN HAT" (non-B variant) shipped with two crystal
-// revisions per Waveshare's wiki:
-//   * Units purchased Aug 2019 or later  → 12 MHz crystal (this file)
-//   * Units purchased before Aug 2019    → 8 MHz crystal
-// If you have the older 8 MHz board, change `clock-frequency` below to
-// <8000000> and rename the .dtbo to match. Radxa's upstream overlay
-// (qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-8mhz.dtso) targets the older
-// 8 MHz revision; we fork it here to match the post-2019 hardware.
-//
 // 40-pin header mapping (Q6A → same physical pins as RPi's SPI0):
 //   pin 19 MOSI → GPIO_49 (SPI12_MOSI)
 //   pin 21 MISO → GPIO_48 (SPI12_MISO)
@@ -19,10 +10,9 @@
 //   pin 24 CE0  → GPIO_51 (SPI12_CS_0)
 //   pin 22 INT  → GPIO_57 (MCP2515 interrupt, falling edge)
 //
-// Source: github.com/radxa-pkg/radxa-overlays at
-//   arch/arm64/boot/dts/qcom/overlays/qcs6490-radxa-dragon-q6a-spi12-cs0-mcp2515-8mhz.dtso
-// (modified: crystal frequency 8 MHz → 12 MHz to match our HAT revision).
-//
+// Derived from Radxa's upstream DTSO at
+//   github.com/radxa-pkg/radxa-overlays
+//   arch/arm64/boot/dts/qcom/overlays/
 // Vendored here (rather than relying on the radxa-overlays-dkms package) so
 // that the image build is deterministic and does not require a DKMS build
 // inside the qemu chroot. The two #include directives and the

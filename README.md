@@ -1,5 +1,8 @@
 # TrailCurrent In-Vehicle Compute
 
+> [!CAUTION]
+> **The Radxa Dragon Q6A variant is a work in progress and is not recommended for use yet.** Further hardware and field testing is required before it should be considered shippable. Use the **CM5 build** for any real deployment.
+
 ![TrailCurrent Headwaters](DOCS/IMGS/headwaters_case.png)
 
 Dockerized edge gateway with MQTT broker, tile server, and local dashboards. Part of the [TrailCurrent](https://trailcurrent.com) open-source vehicle platform.
