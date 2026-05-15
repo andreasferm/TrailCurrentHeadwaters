@@ -256,7 +256,11 @@ module.exports = (db) => {
                 if (!Array.isArray(mcu_modules)) {
                     return res.status(400).json({ error: 'mcu_modules must be an array' });
                 }
-                // Validate each module
+                // Validate user-editable fields only. addr/canid/fw/target/
+                // canInstance/wireless are firmware-controlled (set at discovery
+                // from the module's mDNS TXT record) and are NOT accepted from
+                // the frontend — they're preserved server-side by merging from
+                // the stored record below.
                 for (const mod of mcu_modules) {
                     if (!mod.type || !mod.name || !mod.hostname) {
                         return res.status(400).json({ error: 'Each module must have type, name, and hostname' });
@@ -264,14 +268,20 @@ module.exports = (db) => {
                     if (typeof mod.type !== 'string' || typeof mod.name !== 'string' || typeof mod.hostname !== 'string') {
                         return res.status(400).json({ error: 'Module type, name, and hostname must be strings' });
                     }
-                    if (mod.canid !== undefined && typeof mod.canid !== 'string') {
-                        return res.status(400).json({ error: 'Module canid must be a string' });
-                    }
-                    if (mod.fw !== undefined && typeof mod.fw !== 'string') {
-                        return res.status(400).json({ error: 'Module fw must be a string' });
-                    }
                 }
-                updates.mcu_modules = mcu_modules;
+                const existing = await systemConfig.findOne({ _id: 'main' });
+                const stored = (existing && existing.mcu_modules) || [];
+                const storedByHostname = new Map(stored.map(m => [m.hostname, m]));
+                const IMMUTABLE_FIELDS = ['addr', 'canid', 'fw', 'target', 'canInstance', 'wireless'];
+                updates.mcu_modules = mcu_modules.map(mod => {
+                    const prior = storedByHostname.get(mod.hostname);
+                    const merged = { ...mod };
+                    for (const f of IMMUTABLE_FIELDS) {
+                        delete merged[f];
+                        if (prior && prior[f] !== undefined) merged[f] = prior[f];
+                    }
+                    return merged;
+                });
             }
 
             // Handle WiFi configuration
