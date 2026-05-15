@@ -24,6 +24,7 @@ mmdebstrap:
     - nvme-cli
     - parted
     - cloud-guest-utils
+    - chrony
 
   customize-hooks:
     # ── Docker CE from official repo ─────────────────────────────────
@@ -80,6 +81,13 @@ mmdebstrap:
       dtparam=fan_temp0=45000,fan_temp0_hyst=5000,fan_temp0_speed=75
       dtparam=fan_temp1=55000,fan_temp1_hyst=5000,fan_temp1_speed=150
       dtparam=fan_temp2=65000,fan_temp2_hyst=5000,fan_temp2_speed=255
+
+      # ── RTC battery trickle charger ──
+      # Enables the on-die RP1 RTC battery charge regulator. 3.0 V matches
+      # the official Raspberry Pi RTC Battery (rechargeable ML2020). If a
+      # non-rechargeable cell (e.g. CR2032) is fitted instead, REMOVE this
+      # line - the charge current will damage a primary cell.
+      dtparam=rtc_bbat_vchg=3000000
       CFGEOF
 
     # ── can0 systemd service ─────────────────────────────────────────
@@ -300,6 +308,41 @@ mmdebstrap:
       WantedBy=multi-user.target
       SVCEOF
 
+    # ── chrony config: NTP server for the LAN + RTC sync ──────────────
+    #
+    # Headwaters serves NTP to the rest of the vehicle network and acts
+    # as a client of pool.ntp.org when internet is reachable. When the
+    # vehicle is rolling without internet, time-from-bearing.service
+    # feeds Bearing's GNSS UTC into the system clock (chrony then
+    # continues to manage the clock from that corrected starting point).
+    # systemd-timesyncd is masked because it would fight chrony.
+    - install -m 644 "$SRCROOT/../../config/chrony/chrony.conf" "$1/etc/chrony/chrony.conf"
+    - ln -sf /dev/null "$1/etc/systemd/system/systemd-timesyncd.service"
+
+    # ── time-from-bearing systemd service ─────────────────────────────
+    - |
+      cat > "$1/etc/systemd/system/time-from-bearing.service" << SVCEOF
+      [Unit]
+      Description=TrailCurrent Bearing GNSS time -> system clock sync
+      After=docker.service can0.service chrony.service
+      Wants=docker.service chrony.service
+      ConditionPathExists=/home/$IGconf_device_user1/local_code/time-from-bearing.py
+
+      [Service]
+      Type=simple
+      # Root is needed for clock_settime(CLOCK_REALTIME). chronyd then
+      # takes over slewing from the corrected starting point.
+      User=root
+      WorkingDirectory=/home/$IGconf_device_user1/local_code
+      EnvironmentFile=/home/$IGconf_device_user1/local_code/.env
+      ExecStart=/home/$IGconf_device_user1/local_code/cantomqtt/bin/python /home/$IGconf_device_user1/local_code/time-from-bearing.py
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+      SVCEOF
+
     # ── discovery-mdns systemd service ────────────────────────────────
     - |
       cat > "$1/etc/systemd/system/discovery-mdns.service" << SVCEOF
@@ -327,7 +370,7 @@ mmdebstrap:
     - install -m 644 "$SRCROOT/layer/files/motd" "$1/etc/motd"
 
     # ── Enable all services ──────────────────────────────────────────
-    - $BDEBSTRAP_HOOKS/enable-units "$1" can0 disable-usb docker trailcurrent-firstboot trailcurrent-load-images cantomqtt discovery-mdns deployment-watcher
+    - $BDEBSTRAP_HOOKS/enable-units "$1" can0 disable-usb docker trailcurrent-firstboot trailcurrent-load-images cantomqtt discovery-mdns deployment-watcher chrony time-from-bearing
 
     # ── Add default user to docker group ─────────────────────────────
     - chroot "$1" usermod -aG docker "$IGconf_device_user1"

@@ -1,0 +1,20 @@
+[Unit]
+Description=TrailCurrent Bearing GNSS time -> system clock sync
+After=docker.service can0.service chrony.service
+Wants=docker.service chrony.service
+# Only start if deployment has provided the code
+ConditionPathExists=/home/trailcurrent/local_code/time-from-bearing.py
+
+[Service]
+Type=simple
+# Root needed for clock_settime(CLOCK_REALTIME). chronyd then takes over
+# from the corrected starting point.
+User=root
+WorkingDirectory=/home/trailcurrent/local_code
+EnvironmentFile=/home/trailcurrent/local_code/.env
+ExecStart=/home/trailcurrent/local_code/cantomqtt/bin/python /home/trailcurrent/local_code/time-from-bearing.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

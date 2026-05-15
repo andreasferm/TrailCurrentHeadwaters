@@ -313,6 +313,34 @@ if [ -f "local_code/discovery-mdns.service" ]; then
     fi
 fi
 
+# Install/restart Bearing-GNSS time sync service (and the chrony NTP daemon
+# it pairs with). Pre-baked CM5 images already have both - this branch
+# only fires the first time deploy.sh runs on an older image.
+if [ -f "local_code/time-from-bearing.service" ]; then
+    if ! command -v chronyd >/dev/null 2>&1; then
+        echo "  Installing chrony NTP daemon..."
+        sudo apt-get install -y -q chrony
+    fi
+    if [ -f "config/chrony/chrony.conf" ]; then
+        sudo cp config/chrony/chrony.conf /etc/chrony/chrony.conf
+        sudo systemctl restart chrony
+    fi
+    if [ ! -L /etc/systemd/system/systemd-timesyncd.service ]; then
+        sudo ln -sf /dev/null /etc/systemd/system/systemd-timesyncd.service
+        sudo systemctl daemon-reload
+        sudo systemctl stop systemd-timesyncd 2>/dev/null || true
+    fi
+    sudo cp local_code/time-from-bearing.service /etc/systemd/system/time-from-bearing.service
+    sudo systemctl daemon-reload
+    if sudo systemctl is-enabled --quiet time-from-bearing.service 2>/dev/null; then
+        sudo systemctl restart time-from-bearing.service
+        echo "  time-from-bearing.service updated and restarted"
+    else
+        sudo systemctl enable --now time-from-bearing.service
+        echo "  time-from-bearing.service installed and started"
+    fi
+fi
+
 # Wait for cantomqtt to initialize (connect to MQTT broker and CAN bus)
 echo "  Waiting for CAN-to-MQTT bridge to initialize..."
 sleep 5
