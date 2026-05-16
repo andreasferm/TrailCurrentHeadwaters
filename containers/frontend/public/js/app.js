@@ -272,6 +272,15 @@ class App {
                     </svg>
                     <span>Map</span>
                 </button>
+                <button class="nav-btn nav-overflow-item" data-page="playbill">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="6" width="20" height="13" rx="2"></rect>
+                        <line x1="8" y1="22" x2="16" y2="22"></line>
+                        <line x1="12" y1="19" x2="12" y2="22"></line>
+                        <path d="M7 3l5 3 5-3"></path>
+                    </svg>
+                    <span>Playbill</span>
+                </button>
                 <button class="nav-btn nav-overflow-item" data-page="config">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="4" y1="21" x2="4" y2="14"></line>
@@ -293,15 +302,6 @@ class App {
                         <line x1="12" y1="22.08" x2="12" y2="12"></line>
                     </svg>
                     <span>Deploy</span>
-                </button>
-                <button class="nav-btn nav-overflow-item" data-page="playbill">
-                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="6" width="20" height="13" rx="2"></rect>
-                        <line x1="8" y1="22" x2="16" y2="22"></line>
-                        <line x1="12" y1="19" x2="12" y2="22"></line>
-                        <path d="M7 3l5 3 5-3"></path>
-                    </svg>
-                    <span>Playbill</span>
                 </button>
                 <button class="nav-btn nav-overflow-item" data-page="settings">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -340,6 +340,15 @@ class App {
                             </svg>
                             <span>Map</span>
                         </button>
+                        <button class="nav-overflow-btn" data-page="playbill">
+                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="6" width="20" height="13" rx="2"></rect>
+                                <line x1="8" y1="22" x2="16" y2="22"></line>
+                                <line x1="12" y1="19" x2="12" y2="22"></line>
+                                <path d="M7 3l5 3 5-3"></path>
+                            </svg>
+                            <span>Playbill</span>
+                        </button>
                         <button class="nav-overflow-btn" data-page="config">
                             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="4" y1="21" x2="4" y2="14"></line>
@@ -361,15 +370,6 @@ class App {
                                 <line x1="12" y1="22.08" x2="12" y2="12"></line>
                             </svg>
                             <span>Deploy</span>
-                        </button>
-                        <button class="nav-overflow-btn" data-page="playbill">
-                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="2" y="6" width="20" height="13" rx="2"></rect>
-                                <line x1="8" y1="22" x2="16" y2="22"></line>
-                                <line x1="12" y1="19" x2="12" y2="22"></line>
-                                <path d="M7 3l5 3 5-3"></path>
-                            </svg>
-                            <span>Playbill</span>
                         </button>
                         <button class="nav-overflow-btn" data-page="settings">
                             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

@@ -1,13 +1,11 @@
 // Playbill Remote tab — generic D-pad for navigating whatever's on the
 // Playbill's screen. Used for every video app (YouTube, Plex, Netflix,
-// Local Library) instead of building a custom UI per service. The Playbill
-// controller dispatches `nav.dpad` to whichever in-rig source is currently
-// driving the display — same way an Apple TV / Roku remote works regardless
-// of which app is open on the TV.
+// Local Library, Live TV) instead of building a custom UI per service.
+// The Playbill controller dispatches `nav.dpad` to whichever in-rig source
+// is currently driving the display — same way an Apple TV / Roku remote
+// works regardless of which app is open on the TV.
 //
-// Layout:
-//
-//          [Power]                        ← system.launchGui
+// Layout parrots the physical IR remote so muscle memory transfers:
 //
 //             ┌────┐
 //             │ ▲  │
@@ -17,29 +15,26 @@
 //             │ ▼  │
 //             └────┘
 //
-//        [← Back]  [⌂ Home]  [☰ Menu]    ← nav.dpad/back/home/menu
+//        [☰]   [⌂]   [↩]                  ← Menu / Home / Back (icon-only)
 //
-//        [⏮]  [⏯]  [⏭]                   ← transport.previous/toggle/next
+//        [text input ………………] [⌫] [↵] [✕]  ← nav.text streaming
 //
-//        [text input ………………] [⌫] [⇥] [↵]  ← nav.text streaming
+// Play/Pause and Prev/Next are intentionally absent — the Playbill GUI
+// already binds those to the arrow keys during media playback, so the
+// d-pad covers them. Power lives at the page level (top-left of the
+// Playbill page) because launching the GUI isn't tab-specific.
 //
 // Each press sends one command — the controller maps it to keystrokes the
 // active source's process (mpv, the Electron renderer, etc.) understands.
 // The text input streams characters as the user types; the Playbill
 // controller deserializes them with '\b' = Backspace, '\n' = Enter,
-// '\t' = Tab, everything else typed into the focused field.
+// everything else typed into the focused field.
 //
 // Volume is intentionally NOT on the Remote tab — it lives in the
 // persistent header widget so it's reachable from every tab as a single
 // master control for the whole Playbill.
 
-import { wsClient } from '../../api.js';
-
-const FEATURE_NAV       = 'nav';
-const FEATURE_SYSTEM    = 'system';
-const FEATURE_TRANSPORT = 'transport';
-
-const WAKE_TIMEOUT_MS = 30_000;
+const FEATURE_NAV = 'nav';
 
 // Coalesce input events into one MQTT publish per typing burst. 40 ms is
 // short enough to feel real-time on the TV, long enough to batch the
@@ -54,8 +49,6 @@ const NAV_TEXT_MAX = 1024;
 
 let ctx = null;
 let keyboardListener = null;
-let presenceListener = null;
-let wakeTimer = null;
 // Text-streaming state — module-scoped because the tab is a singleton and
 // the diff calculation has to survive re-renders of the surrounding page.
 // Reset on init().
@@ -72,14 +65,6 @@ export const remoteTab = {
     render() {
         return `
             <div class="playbill-remote">
-                <div class="playbill-remote-top">
-                    <button class="playbill-power-btn" data-action="power" aria-label="Wake / launch Playbill" title="Wake Playbill">
-                        ${iconPower()}
-                        <span>Power</span>
-                    </button>
-                    <span class="playbill-wake-status" id="playbill-wake-status" hidden></span>
-                </div>
-
                 <div class="playbill-dpad" role="group" aria-label="Direction pad">
                     <button class="playbill-dpad-btn playbill-dpad-up"     data-key="up"     aria-label="Up">
                         ${iconArrow()}
@@ -98,27 +83,15 @@ export const remoteTab = {
                     </button>
                 </div>
 
-                <div class="playbill-remote-row">
-                    <button class="playbill-remote-btn" data-key="back" aria-label="Back" title="Back (Esc)">
-                        ${iconBack()} <span>Back</span>
+                <div class="playbill-remote-row playbill-remote-nav">
+                    <button class="playbill-remote-btn playbill-remote-icon" data-key="menu" aria-label="Menu" title="Menu">
+                        ${iconMenu()}
                     </button>
-                    <button class="playbill-remote-btn" data-key="home" aria-label="Home" title="Home">
-                        ${iconHome()} <span>Home</span>
+                    <button class="playbill-remote-btn playbill-remote-icon" data-key="home" aria-label="Home" title="Home">
+                        ${iconHome()}
                     </button>
-                    <button class="playbill-remote-btn" data-key="menu" aria-label="Menu" title="Menu">
-                        ${iconMenu()} <span>Menu</span>
-                    </button>
-                </div>
-
-                <div class="playbill-remote-row playbill-remote-transport">
-                    <button class="playbill-remote-btn" data-transport="previous" aria-label="Previous" title="Previous">
-                        ${iconPrev()}
-                    </button>
-                    <button class="playbill-remote-btn playbill-remote-toggle" data-transport="toggle" aria-label="Play / pause" title="Play / Pause">
-                        ${iconPlayPause()}
-                    </button>
-                    <button class="playbill-remote-btn" data-transport="next" aria-label="Next" title="Next">
-                        ${iconNext()}
+                    <button class="playbill-remote-btn playbill-remote-icon" data-key="back" aria-label="Back" title="Back (Esc)">
+                        ${iconBack()}
                     </button>
                 </div>
 
@@ -139,10 +112,6 @@ export const remoteTab = {
                                 aria-label="Backspace" title="Backspace">
                             ${iconBackspace()}
                         </button>
-                        <button class="playbill-remote-btn playbill-text-btn" data-text-key="tab"
-                                aria-label="Tab" title="Next field">
-                            ${iconTab()}
-                        </button>
                         <button class="playbill-remote-btn playbill-text-btn playbill-text-submit"
                                 data-text-key="submit" aria-label="Submit" title="Submit (Enter)">
                             ${iconReturn()}
@@ -154,10 +123,6 @@ export const remoteTab = {
                         </button>
                     </div>
                 </div>
-
-                <p class="playbill-remote-hint">
-                    Buttons above or keyboard: arrows / Enter / Esc / H / M.
-                </p>
             </div>
         `;
     },
@@ -170,12 +135,10 @@ export const remoteTab = {
 
         // Single delegated click handler — matches on the right data-* attr.
         root.addEventListener('click', (e) => {
-            const btn = e.target.closest('[data-action], [data-key], [data-transport], [data-text-key]');
+            const btn = e.target.closest('[data-key], [data-text-key]');
             if (!btn) return;
-            if (btn.dataset.action === 'power') return this._pressPower(btn);
-            if (btn.dataset.key)                return this._pressNav(btn.dataset.key, btn);
-            if (btn.dataset.transport)          return this._pressTransport(btn.dataset.transport, btn);
-            if (btn.dataset.textKey)            return this._pressTextKey(btn.dataset.textKey, btn);
+            if (btn.dataset.key)     return this._pressNav(btn.dataset.key, btn);
+            if (btn.dataset.textKey) return this._pressTextKey(btn.dataset.textKey, btn);
         });
 
         // Text-streaming input — diffs the new value against `lastSentValue`
@@ -231,24 +194,6 @@ export const remoteTab = {
             this._pressNav(key, root.querySelector(`[data-key="${key}"]`));
         };
         window.addEventListener('keydown', keyboardListener);
-
-        // Independent subscription to system status so we can clear the
-        // "Waking…" badge the moment the GUI comes online — _applyStatus
-        // ToActiveDevice doesn't route 'system' to tabs (it's not a tab
-        // id), so we have to listen for it here. Cheap; one filter per
-        // playbill_status event.
-        presenceListener = (data) => {
-            if (!data || data.feature !== 'system') return;
-            if (!ctx || data.deviceId !== ctx.deviceId) return;
-            if (data.payload && data.payload.guiOpen) this._clearWaking();
-        };
-        wsClient.on('playbill_status', presenceListener);
-
-        // If the page has a cached system status for this device with
-        // guiOpen already true, hide any stale waking badge on mount.
-        const cached = ctx && typeof ctx.getLastStatus === 'function'
-            ? ctx.getLastStatus(FEATURE_SYSTEM) : null;
-        if (cached && cached.guiOpen) this._clearWaking();
     },
 
     cleanup() {
@@ -256,11 +201,6 @@ export const remoteTab = {
             window.removeEventListener('keydown', keyboardListener);
             keyboardListener = null;
         }
-        if (presenceListener) {
-            try { wsClient.off('playbill_status', presenceListener); } catch (_) { /* noop */ }
-            presenceListener = null;
-        }
-        if (wakeTimer)     { clearTimeout(wakeTimer);     wakeTimer = null; }
         if (coalesceTimer) { clearTimeout(coalesceTimer); coalesceTimer = null; }
         lastSentValue = '';
         inFlightCount = 0;
@@ -268,7 +208,7 @@ export const remoteTab = {
         ctx = null;
     },
 
-    onStatus() { /* no per-feature payload — see init() for system status subscription */ },
+    onStatus() { /* no per-feature payload — system status handled at the page level */ },
 
     // ── internals ────────────────────────────────────────────────────────
 
@@ -277,14 +217,6 @@ export const remoteTab = {
         if (!ctx) return;
         ctx.sendCommand(FEATURE_NAV, { action: 'nav.dpad', key })
             .catch((e) => console.error('[playbill] nav.dpad', key, 'failed:', e));
-    },
-
-    _pressTransport(verb, btn) {
-        flash(btn);
-        if (!ctx) return;
-        const action = `transport.${verb}`;
-        ctx.sendCommand(FEATURE_TRANSPORT, { action })
-            .catch((e) => console.error('[playbill]', action, 'failed:', e));
     },
 
     // ── text streaming ──────────────────────────────────────────────────
@@ -299,9 +231,6 @@ export const remoteTab = {
                 // re-issue that backspace too.
                 this._sendText('\b');
                 this._trimLocalTail(1);
-                return;
-            case 'tab':
-                this._sendText('\t');
                 return;
             case 'submit':
                 this._submitText();
@@ -424,54 +353,6 @@ export const remoteTab = {
         if (!dot) return;
         dot.classList.toggle('active', inFlightCount > 0);
     },
-
-    _pressPower(btn) {
-        flash(btn);
-        if (!ctx) return;
-        this._showWaking();
-        ctx.sendCommand(FEATURE_SYSTEM, { action: 'system.launchGui' })
-            .catch((e) => {
-                console.error('[playbill] system.launchGui failed:', e);
-                this._showWakeError(e && e.message ? e.message : 'Command failed');
-            });
-    },
-
-    _showWaking() {
-        const el = document.getElementById('playbill-wake-status');
-        if (!el) return;
-        el.hidden = false;
-        el.classList.remove('error');
-        el.textContent = 'Waking Playbill…';
-        if (wakeTimer) clearTimeout(wakeTimer);
-        wakeTimer = setTimeout(() => {
-            // Still waiting after the deadline — keep the status visible but
-            // tell the user where to look. Often this means the controller
-            // dispatched system.launchGui but the Electron process didn't
-            // start (missing display, crashed, etc.).
-            if (!el.isConnected) return;
-            el.classList.add('error');
-            el.textContent = 'Power command sent. Playbill GUI hasn’t reported online — check the device.';
-            wakeTimer = null;
-        }, WAKE_TIMEOUT_MS);
-    },
-
-    _showWakeError(msg) {
-        const el = document.getElementById('playbill-wake-status');
-        if (!el) return;
-        el.hidden = false;
-        el.classList.add('error');
-        el.textContent = `Failed to wake Playbill: ${msg}`;
-        if (wakeTimer) { clearTimeout(wakeTimer); wakeTimer = null; }
-    },
-
-    _clearWaking() {
-        const el = document.getElementById('playbill-wake-status');
-        if (!el) return;
-        el.hidden = true;
-        el.classList.remove('error');
-        el.textContent = '';
-        if (wakeTimer) { clearTimeout(wakeTimer); wakeTimer = null; }
-    },
 };
 
 // ── helpers ──────────────────────────────────────────────────────────────
@@ -508,44 +389,11 @@ function iconMenu() {
         <line x1="3" y1="18" x2="21" y2="18"></line>
     </svg>`;
 }
-function iconPower() {
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-        <line x1="12" y1="2" x2="12" y2="12"></line>
-    </svg>`;
-}
-function iconPrev() {
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polygon points="19 20 9 12 19 4 19 20"></polygon>
-        <line x1="5" y1="19" x2="5" y2="5"></line>
-    </svg>`;
-}
-function iconNext() {
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polygon points="5 4 15 12 5 20 5 4"></polygon>
-        <line x1="19" y1="5" x2="19" y2="19"></line>
-    </svg>`;
-}
-function iconPlayPause() {
-    // Half play, half pause — visually signals "this toggles".
-    return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <polygon points="3 4 10 12 3 20"></polygon>
-        <rect x="14" y="5" width="3" height="14"></rect>
-        <rect x="19" y="5" width="3" height="14"></rect>
-    </svg>`;
-}
 function iconBackspace() {
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M21 5H10l-7 7 7 7h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"></path>
         <line x1="18" y1="9" x2="12" y2="15"></line>
         <line x1="12" y1="9" x2="18" y2="15"></line>
-    </svg>`;
-}
-function iconTab() {
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="17 8 21 12 17 16"></polyline>
-        <line x1="3" y1="12" x2="21" y2="12"></line>
-        <line x1="3" y1="5"  x2="3"  y2="19"></line>
     </svg>`;
 }
 function iconReturn() {

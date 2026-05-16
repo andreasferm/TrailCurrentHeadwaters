@@ -1,9 +1,18 @@
 // Playbill remote-control page.
 //
-// Shape: device picker (top) → tab strip (Radio / Live TV / Sources / Remote)
-// → tab content. The tab system is a small registry so adding a new feature
-// later is purely additive: write a renderer with {id, label, icon, render,
-// init, cleanup, onStatus} and push it into TABS. The shell wires routing,
+// Shape: persistent Power button (top-left) → tab strip (Remote / Radio /
+// YouTube) → tab content. Power lives at the page level because it launches
+// the Playbill GUI — that action isn't specific to any tab. The device
+// picker is intentionally not surfaced in the UI right now; the state
+// layer still auto-selects the first online Playbill, but we'll add a
+// picker only if/when multiple-Playbill rigs become a real use case.
+// Live TV is driven from the Remote tab; we don't surface it as its own
+// tab because there's no per-channel UI to render (the user is looking
+// at the TV, not the phone, while tuning).
+//
+// The tab system is a small registry so adding a new feature later is
+// purely additive: write a renderer with {id, label, icon, render, init,
+// cleanup, onStatus} and push it into TABS. The shell wires routing,
 // device selection, status fan-out, and lifecycle automatically.
 //
 // State flow:
@@ -34,26 +43,10 @@ import { youtubeTab }   from './playbill/youtube.js';
 //   onStatus(payload) — called when a status for this feature lands
 //   enabled   — boolean; if false, tab renders as a stub
 const TABS = [
-    radioTab,
-    placeholderTab('livetv',    'Live TV',     'Channel list + tuner control arrive in the Live TV phase.'),
     remoteTab,
+    radioTab,
     youtubeTab,
 ];
-
-function placeholderTab(id, label, hint) {
-    return {
-        id, label, enabled: false,
-        render: () => `
-            <div class="playbill-tab-stub">
-                <p class="playbill-stub-title">${label}</p>
-                <p class="playbill-stub-hint">${hint}</p>
-            </div>
-        `,
-        init() {},
-        cleanup() {},
-        onStatus() {},
-    };
-}
 
 // Maps the controller's `source` enum onto the tab id that represents
 // that mode in the PWA. Every video / streaming source maps to the
@@ -62,7 +55,7 @@ function placeholderTab(id, label, hint) {
 // already showing on screen (Roku/Apple-TV style).
 const SOURCE_TO_TAB_ID = {
     radio:   'radio',
-    livetv:  'livetv',
+    livetv:  'nav',
     youtube: 'nav',
     local:   'nav',
     plex:    'nav',
@@ -70,10 +63,15 @@ const SOURCE_TO_TAB_ID = {
     netflix: 'nav',
 };
 
+// How long to wait for the Playbill GUI to report online after sending
+// system.launchGui before flagging the wake attempt as stuck. Same
+// constant used by the legacy Remote-tab Power button.
+const WAKE_TIMEOUT_MS = 30_000;
+
 let state = {
     devices:        new Map(),   // deviceId → presence payload
     selectedId:     null,
-    activeTabId:    'radio',
+    activeTabId:    'nav',
     lastStatus:     new Map(),   // feature → last seen payload (for selected device)
     // Per-device-per-feature cache of every status payload we've seen. Survives
     // selection changes so a status that arrived before the picker chose a
@@ -81,26 +79,24 @@ let state = {
     // playbill_presence sets selectedId) isn't lost. Map<deviceId, Map<feature, payload>>.
     statusByDevice: new Map(),
     listeners:      [],          // WS unsubscribe functions
+    wakeTimer:      null,        // timeout id for the "Waking…" badge
 };
 
 export const playbillPage = {
     render() {
         return `
             <section class="page-playbill">
-                <header class="playbill-header">
-                    <h1 class="section-title">Playbill</h1>
-                    <div class="playbill-device-picker" id="playbill-device-picker">
-                        <span class="playbill-device-empty">No Playbills found</span>
-                    </div>
-                    <button class="playbill-home-btn" id="playbill-home-btn"
-                            title="Send Home to Playbill" aria-label="Home">
+                <div class="playbill-top-bar">
+                    <button class="playbill-power-btn" id="playbill-power-btn"
+                            aria-label="Wake / launch Playbill" title="Power (wake Playbill)">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M3 11l9-7 9 7v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"></path>
+                            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                            <line x1="12" y1="2" x2="12" y2="12"></line>
                         </svg>
-                        <span>Home</span>
                     </button>
-                </header>
+                    <span class="playbill-wake-status" id="playbill-wake-status" hidden></span>
+                </div>
 
                 ${volumeWidget.render()}
 
@@ -161,6 +157,10 @@ export const playbillPage = {
             console.warn('[playbill] failed to fetch device list:', e);
         }
         // Auto-pick the first online device (or first known if none online).
+        // No UI surface for picking between multiple Playbills right now;
+        // we keep the selection logic in place so the day a second Playbill
+        // shows up on a rig we only need to add the picker, not rewire
+        // routing.
         if (!state.selectedId) {
             const online = [...state.devices.values()].find((d) => d.online !== false);
             const pick   = online || [...state.devices.values()][0];
@@ -169,7 +169,25 @@ export const playbillPage = {
                 this._replayCachedStatus();
             }
         }
-        this._renderDevicePicker();
+
+        // Persistent top-left Power button. Wakes / launches the Playbill
+        // GUI; reachable from every tab because launching the device isn't
+        // a tab-specific action.
+        const powerBtn = document.getElementById('playbill-power-btn');
+        if (powerBtn) powerBtn.addEventListener('click', () => {
+            powerBtn.classList.add('pressed');
+            setTimeout(() => powerBtn.classList.remove('pressed'), 140);
+            this._showWaking();
+            this._sendCommand('system', { action: 'system.launchGui' })
+                .catch((e) => {
+                    console.error('[playbill] system.launchGui failed:', e);
+                    this._showWakeError(e && e.message ? e.message : 'Command failed');
+                });
+        });
+        // If the cached system status already reports the GUI online,
+        // suppress any stale "Waking…" badge on mount.
+        const cachedSys = state.lastStatus.get('system');
+        if (cachedSys && cachedSys.guiOpen) this._clearWaking();
 
         // Tab strip handler.
         const tabBar = document.getElementById('playbill-tabs');
@@ -190,17 +208,9 @@ export const playbillPage = {
             getLastStatus: () => state.lastStatus.get('volume') || null,
         });
 
-        // Persistent Home button in the header — one tap from any tab to
-        // send the Playbill back to its home screen. Same nav.dpad
-        // vocabulary as the Remote tab; the controller dispatches it to
-        // whatever source is currently driving the display.
-        const homeBtn = document.getElementById('playbill-home-btn');
-        if (homeBtn) homeBtn.addEventListener('click', () => {
-            homeBtn.classList.add('pressed');
-            setTimeout(() => homeBtn.classList.remove('pressed'), 140);
-            this._sendCommand('nav', { action: 'nav.dpad', key: 'home' })
-                .catch((e) => console.error('[playbill] header Home failed:', e));
-        });
+        // Home is now reachable only from the Remote tab — no redundant
+        // header copy. Keeps the top of the page clear so the Remote tab
+        // fits on a phone screen without scrolling.
 
         // Render the initial tab body.
         this._activateTab(state.activeTabId);
@@ -211,6 +221,7 @@ export const playbillPage = {
             try { off(); } catch (_) { /* noop */ }
         }
         state.listeners = [];
+        if (state.wakeTimer) { clearTimeout(state.wakeTimer); state.wakeTimer = null; }
         try { volumeWidget.cleanup(); } catch (e) { console.error('[playbill] volume cleanup:', e); }
         const tab = TABS.find((t) => t.id === state.activeTabId);
         if (tab && typeof tab.cleanup === 'function') {
@@ -219,57 +230,6 @@ export const playbillPage = {
     },
 
     // ── internals ────────────────────────────────────────────────────────
-
-    _renderDevicePicker() {
-        const root = document.getElementById('playbill-device-picker');
-        if (!root) return;
-        const devices = [...state.devices.values()];
-        if (devices.length === 0) {
-            root.innerHTML = '<span class="playbill-device-empty">No Playbill found on this rig — power it on or check MQTT</span>';
-            return;
-        }
-        const selected = state.selectedId && state.devices.get(state.selectedId);
-        // Default selected to first device if the prior selection went away.
-        if (!selected && devices.length > 0) state.selectedId = devices[0].deviceId;
-        const sel = state.devices.get(state.selectedId);
-
-        const pickerHtml = devices.length === 1
-            ? `<span class="playbill-device-pill ${sel.online === false ? 'offline' : 'online'}">
-                   <span class="playbill-device-dot"></span>
-                   <span class="playbill-device-name">${escapeHtml(sel.name || sel.deviceId)}</span>
-               </span>`
-            : `<select class="form-input playbill-device-select" id="playbill-device-select">
-                   ${devices.map((d) => `
-                       <option value="${escapeAttr(d.deviceId)}" ${d.deviceId === state.selectedId ? 'selected' : ''}>
-                           ${escapeHtml(d.name || d.deviceId)} ${d.online === false ? '(offline)' : ''}
-                       </option>
-                   `).join('')}
-               </select>`;
-
-        // Renaming a Playbill is done in the Module Configuration list
-        // (Config page → edit pencil on the row), same as any other
-        // TrailCurrent module. The picker here is read-only — it just
-        // shows which Playbill the tabs below are currently controlling.
-        root.innerHTML = `
-            <div class="playbill-device-row" id="playbill-device-row">
-                ${pickerHtml}
-            </div>
-        `;
-
-        const dropdown = document.getElementById('playbill-device-select');
-        if (dropdown) dropdown.addEventListener('change', (e) => {
-            state.selectedId = e.target.value;
-            state.lastStatus = new Map();
-            try { volumeWidget.onStatus(null); } catch (_) { /* noop */ }
-            // Replay any cached status for the newly selected device so the
-            // volume widget + active tab populate without waiting for a
-            // republish that may never come (only `transport` republishes
-            // on every state change; volume/radio/livetv/system are edge-
-            // triggered).
-            this._replayCachedStatus();
-            this._activateTab(state.activeTabId);
-        });
-    },
 
     _activateTab(tabId) {
         const prev = TABS.find((t) => t.id === state.activeTabId);
@@ -307,7 +267,7 @@ export const playbillPage = {
         if (!payload || !payload.deviceId) return;
         const prior = state.devices.get(payload.deviceId) || {};
         state.devices.set(payload.deviceId, { ...prior, ...payload });
-        // First online device wins the picker. Replay any cached status
+        // First online device wins the selection. Replay any cached status
         // payloads that arrived before this presence event so widgets like
         // the volume slider can enable on first paint instead of waiting
         // for a second status republish that may never come.
@@ -316,7 +276,6 @@ export const playbillPage = {
             state.selectedId = payload.deviceId;
             this._replayCachedStatus();
         }
-        this._renderDevicePicker();
     },
 
     _handleStatus({ deviceId, feature, payload } = {}) {
@@ -343,6 +302,13 @@ export const playbillPage = {
             state.lastStatus.set('volume', payload);
             try { volumeWidget.onStatus(payload); }
             catch (e) { console.error('[playbill] volume onStatus:', e); }
+            return;
+        }
+        // System status drives the persistent Power-button feedback —
+        // clear "Waking…" the moment the Playbill GUI reports online.
+        if (feature === 'system') {
+            state.lastStatus.set('system', payload);
+            if (payload && payload.guiOpen) this._clearWaking();
             return;
         }
         state.lastStatus.set(feature, payload);
@@ -396,12 +362,43 @@ export const playbillPage = {
             body: JSON.stringify(cmd),
         });
     },
+
+    // ── Power-button wake feedback ───────────────────────────────────────
+    // Show / clear a small status badge next to the Power button so the
+    // user gets feedback that their tap was received. The badge clears
+    // automatically when a system status with guiOpen=true arrives.
+
+    _showWaking() {
+        const el = document.getElementById('playbill-wake-status');
+        if (!el) return;
+        el.hidden = false;
+        el.classList.remove('error');
+        el.textContent = 'Waking Playbill…';
+        if (state.wakeTimer) clearTimeout(state.wakeTimer);
+        state.wakeTimer = setTimeout(() => {
+            if (!el.isConnected) return;
+            el.classList.add('error');
+            el.textContent = 'Power command sent. Playbill GUI hasn’t reported online — check the device.';
+            state.wakeTimer = null;
+        }, WAKE_TIMEOUT_MS);
+    },
+
+    _showWakeError(msg) {
+        const el = document.getElementById('playbill-wake-status');
+        if (!el) return;
+        el.hidden = false;
+        el.classList.add('error');
+        el.textContent = `Failed to wake Playbill: ${msg}`;
+        if (state.wakeTimer) { clearTimeout(state.wakeTimer); state.wakeTimer = null; }
+    },
+
+    _clearWaking() {
+        const el = document.getElementById('playbill-wake-status');
+        if (!el) return;
+        el.hidden = true;
+        el.classList.remove('error');
+        el.textContent = '';
+        if (state.wakeTimer) { clearTimeout(state.wakeTimer); state.wakeTimer = null; }
+    },
 };
 
-// ── tiny escape helpers (no template engine here) ────────────────────────
-function escapeHtml(s) {
-    return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-function escapeAttr(s) { return escapeHtml(s); }

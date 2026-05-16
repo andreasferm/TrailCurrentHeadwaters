@@ -4115,14 +4115,6 @@ body {
     margin: 0 auto;
 }
 
-.playbill-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
 .playbill-device-picker {
     display: flex;
     align-items: center;
@@ -4275,24 +4267,6 @@ body {
 }
 
 .playbill-tab-body { min-height: 280px; }
-
-.playbill-tab-stub {
-    padding: 32px 16px;
-    text-align: center;
-    color: var(--text-muted);
-}
-.playbill-stub-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
-}
-.playbill-stub-hint {
-    font-size: 14px;
-    max-width: 320px;
-    margin: 0 auto;
-    line-height: 1.5;
-}
 
 /* ─── Radio tab ─── */
 
@@ -4626,28 +4600,14 @@ body {
     .playbill-vol-pct { min-width: 42px; font-size: 12px; }
 }
 
-/* ─── Playbill header Home button ────────────────────────────────────── */
+/* ─── Playbill page top bar (persistent Power button, top-left) ───────── */
 
-.playbill-home-btn {
-    display: inline-flex;
+.playbill-top-bar {
+    display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-card);
-    color: var(--text-primary);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.12s, box-shadow 0.15s, transform 0.05s;
+    gap: 10px;
+    min-height: 40px;
 }
-.playbill-home-btn svg { width: 16px; height: 16px; }
-.playbill-home-btn:hover {
-    background: color-mix(in srgb, var(--primary) 12%, var(--bg-card));
-    box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 25%, transparent);
-}
-.playbill-home-btn.pressed { transform: scale(0.94); background: var(--primary); color: var(--btn-text); }
 
 /* ─── Playbill Remote tab (D-pad) ────────────────────────────────────── */
 
@@ -4740,39 +4700,24 @@ body {
     color: var(--btn-text);
 }
 
-.playbill-remote-hint {
-    color: var(--text-muted);
-    font-size: 12px;
-    text-align: center;
-    margin: 4px 0 0;
-}
-
-/* Power button + waking status badge above the D-pad. The Power button is
-   visually distinct (warning-amber) so it doesn't blend with the green
+/* Power button — lives in the page-level top bar (not the Remote tab).
+   Visually distinct (warning-amber) so it doesn't blend with the green
    D-pad — it's the "wake / launch" affordance, not navigation. */
-.playbill-remote-top {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    min-height: 40px;
-}
 .playbill-power-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 18px;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
     border-radius: 14px;
     border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--border-color));
     background: color-mix(in srgb, var(--warning) 12%, var(--bg-card));
     color: var(--warning);
-    font-size: 14px;
-    font-weight: 600;
     cursor: pointer;
     transition: background 0.12s, box-shadow 0.15s, transform 0.05s;
 }
-.playbill-power-btn svg { width: 18px; height: 18px; }
+.playbill-power-btn svg { width: 22px; height: 22px; }
 .playbill-power-btn:hover {
     background: color-mix(in srgb, var(--warning) 22%, var(--bg-card));
     box-shadow: 0 0 12px color-mix(in srgb, var(--warning) 35%, transparent);
@@ -4797,25 +4742,24 @@ body {
     border-color: color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
-/* Transport row on the Remote tab. Square icon buttons; the play/pause
-   toggle is highlighted as the primary affordance.
-   Volume is intentionally absent here — it lives in the persistent header
-   widget so it acts as a single master control for the whole Playbill. */
-.playbill-remote-transport {
+/* Icon-only Menu / Home / Back row directly under the D-pad. Three 72-px
+   squares with the same 8-px gap as the D-pad so the row visually sits
+   under the D-pad's columns (3*72 + 2*8 = 232 px total, matching the
+   D-pad width). */
+.playbill-remote-nav {
     justify-content: center;
+    gap: 8px;
+    width: auto;
+    max-width: none;
 }
-.playbill-remote-transport .playbill-remote-btn {
+.playbill-remote-nav .playbill-remote-icon {
     flex: 0 0 auto;
-    min-width: 72px;
-    padding: 14px 16px;
+    width: 72px;
+    height: 72px;
+    padding: 0;
+    border-radius: 14px;
 }
-.playbill-remote-transport .playbill-remote-toggle {
-    background: color-mix(in srgb, var(--primary) 14%, var(--bg-card));
-    border-color: color-mix(in srgb, var(--primary) 35%, var(--border-color));
-    color: var(--primary);
-}
-.playbill-remote-transport .playbill-remote-toggle svg { width: 22px; height: 22px; }
-.playbill-remote-transport .playbill-remote-btn svg { width: 20px; height: 20px; }
+.playbill-remote-nav .playbill-remote-icon svg { width: 22px; height: 22px; }
 
 /* Text-streaming section. Sits at the bottom of the remote like the
    keyboard tray in Apple TV Remote / Roku app — the physical-remote
@@ -4923,6 +4867,11 @@ body {
     }
     .playbill-dpad-btn svg { width: 24px; height: 24px; }
     .playbill-remote-btn { padding: 10px; font-size: 12px; }
+    .playbill-remote-nav .playbill-remote-icon {
+        width: 64px;
+        height: 64px;
+    }
+    .playbill-remote-nav .playbill-remote-icon svg { width: 20px; height: 20px; }
 }
 
 /* iOS Safari progressively ignores `user-scalable=no` in the viewport meta
