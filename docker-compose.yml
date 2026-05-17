@@ -35,6 +35,11 @@ services:
       - ./data/deployments:/app/deployments
       - /sys:/host/sys:ro
       - /proc:/host/proc:ro
+      # Share host's avahi-daemon so the backend can resolve *.local
+      # hostnames (Peregrine, other LAN devices) — Docker bridge nets
+      # don't propagate mDNS multicast.
+      - /var/run/avahi-daemon/socket:/var/run/avahi-daemon/socket
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     restart: unless-stopped # Import for reboots
     depends_on:
       - mosquitto

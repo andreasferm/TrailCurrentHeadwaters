@@ -1,6 +1,23 @@
 FROM node:24-slim
 
 # Node.js 24 LTS with npm included
+#
+# ca-certificates + openssl are needed so we can install custom CA certs
+# (e.g. a Peregrine board's self-signed CA) into the system trust store
+# at runtime via `update-ca-certificates`. NODE_EXTRA_CA_CERTS makes
+# Node.js trust the system bundle in addition to its bundled Mozilla CAs.
+#
+# avahi-utils + dbus give us `avahi-resolve` so the backend can resolve
+# `*.local` hostnames (Docker's bridge networks don't forward mDNS
+# multicast and don't ship libnss-mdns). At runtime we mount the host's
+# /run/dbus and /var/run/avahi-daemon sockets so the resolver talks to
+# the host's avahi-daemon instead of needing one in the container.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates openssl avahi-utils dbus \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
 COPY package*.json ./

@@ -31,6 +31,7 @@ const STATIC_ASSETS = [
     '/js/pages/config.js',
     '/js/pages/deployments.js',
     '/js/pages/playbill.js',
+    '/js/pages/peregrine.js',
     '/js/pages/playbill/radio.js',
     '/js/pages/playbill/volume.js',
     '/js/pages/playbill/remote.js',

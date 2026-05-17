@@ -14,6 +14,7 @@ import { wizardPage } from './pages/wizard.js';
 import { configPage } from './pages/config.js';
 import { deploymentsPage } from './pages/deployments.js';
 import { playbillPage } from './pages/playbill.js';
+import { peregrinePage } from './pages/peregrine.js';
 
 class App {
     constructor() {
@@ -116,6 +117,7 @@ class App {
             .register('config', configPage)
             .register('deployments', deploymentsPage)
             .register('playbill', playbillPage)
+            .register('peregrine', peregrinePage)
             .register('settings', settingsPage);
 
         // Initialize navigation
@@ -272,6 +274,14 @@ class App {
                     </svg>
                     <span>Map</span>
                 </button>
+                <button class="nav-btn nav-overflow-item" data-page="peregrine">
+                    <svg class="nav-icon" viewBox="0 0 512 512" fill="none" stroke="currentColor" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M200 100 C230 80 280 80 310 100 C350 120 370 160 370 200 C370 220 365 235 355 245 L340 270 L340 300 C320 320 300 340 280 380 C260 420 240 440 220 450 C200 460 180 440 170 420 C160 400 160 360 170 320 C150 320 130 310 120 290 C110 270 110 240 120 210 C130 170 160 130 200 100Z"></path>
+                        <path d="M355 200 C380 200 410 215 420 235 C425 245 415 255 400 250"></path>
+                        <circle cx="280" cy="175" r="10" fill="currentColor" stroke="none"></circle>
+                    </svg>
+                    <span>Peregrine</span>
+                </button>
                 <button class="nav-btn nav-overflow-item" data-page="playbill">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="2" y="6" width="20" height="13" rx="2"></rect>
@@ -339,6 +349,14 @@ class App {
                                 <circle cx="12" cy="10" r="3"></circle>
                             </svg>
                             <span>Map</span>
+                        </button>
+                        <button class="nav-overflow-btn" data-page="peregrine">
+                            <svg class="nav-icon" viewBox="0 0 512 512" fill="none" stroke="currentColor" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M200 100 C230 80 280 80 310 100 C350 120 370 160 370 200 C370 220 365 235 355 245 L340 270 L340 300 C320 320 300 340 280 380 C260 420 240 440 220 450 C200 460 180 440 170 420 C160 400 160 360 170 320 C150 320 130 310 120 290 C110 270 110 240 120 210 C130 170 160 130 200 100Z"></path>
+                                <path d="M355 200 C380 200 410 215 420 235 C425 245 415 255 400 250"></path>
+                                <circle cx="280" cy="175" r="10" fill="currentColor" stroke="none"></circle>
+                            </svg>
+                            <span>Peregrine</span>
                         </button>
                         <button class="nav-overflow-btn" data-page="playbill">
                             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -430,36 +448,45 @@ class App {
     }
 
     registerServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', async () => {
-                try {
-                    // Add cache-busting parameter with version from manifest to force fresh service worker
-                    const response = await fetch('/manifest.json');
-                    const manifest = await response.json();
-                    const version = manifest.version || 'unknown';
-                    const registration = await navigator.serviceWorker.register(`/service-worker.js?v=${version}`);
-                    console.log('Service Worker registered:', registration.scope);
+        if (!('serviceWorker' in navigator)) return;
 
-                    // Check for updates periodically
-                    setInterval(() => {
-                        registration.update();
-                    }, 60000); // Check every minute
+        // Reload the page when a new SW takes control. This is what makes
+        // iOS standalone PWAs actually pick up updates — without it the old
+        // JS heap stays resident across app launches.
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+        });
 
-                    // Check for updates
-                    registration.addEventListener('updatefound', () => {
-                        const newWorker = registration.installing;
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                // New content available, show update notification
-                                console.log('New content available, please refresh.');
-                            }
-                        });
-                    });
-                } catch (error) {
-                    console.error('Service Worker registration failed:', error);
+        window.addEventListener('load', async () => {
+            try {
+                const registration = await navigator.serviceWorker.register('/service-worker.js');
+                console.log('Service Worker registered:', registration.scope);
+
+                // If a new SW is already waiting at registration time, activate it.
+                if (registration.waiting && navigator.serviceWorker.controller) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
                 }
-            });
-        }
+
+                setInterval(() => registration.update(), 60000);
+
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    if (!newWorker) return;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            // New SW installed alongside an existing controller — push it
+                            // to activate now; controllerchange above will reload the page.
+                            newWorker.postMessage({ type: 'SKIP_WAITING' });
+                        }
+                    });
+                });
+            } catch (error) {
+                console.error('Service Worker registration failed:', error);
+            }
+        });
     }
 
     setupConnectionStatus() {

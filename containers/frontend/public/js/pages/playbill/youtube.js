@@ -5,8 +5,11 @@
 // API tier is reserved for OEM partners; small third parties get the
 // public Data API and a verification gate that rejects duplicate front-
 // ends. The workaround: each user creates their own Google Cloud
-// project and pastes their client_id / client_secret / API key here.
-// See docs/youtube-setup.md (in the Playbill repo) for the step-by-step.
+// project and pastes their client_id / client_secret here. No separate
+// API key needed — we authenticate Data API calls with the user's OAuth
+// access token. See docs/youtube-setup.md (in the Playbill repo) or
+// /docs/playbill-youtube-setup.html (served by this PWA) for the
+// step-by-step.
 //
 // Reactive state surface (from the controller's `youtube` feature topic):
 //   {
@@ -17,7 +20,7 @@
 //   }
 //
 // UI states (one of):
-//   not configured  → form: clientId + clientSecret + apiKey + Save
+//   not configured  → form: clientId + clientSecret + Save
 //   configured, not signed in → "Sign in" button
 //   signing in (pending != null) → big code + URL + countdown + Cancel
 //   signed in → "Signed in as <title>" + Sign Out
@@ -99,12 +102,6 @@ export const youtubeTab = {
                         <input class="form-input" name="clientSecret" type="password" autocomplete="off"
                                spellcheck="false" required
                                placeholder="GOCSPX-…">
-                    </label>
-                    <label class="playbill-youtube-field">
-                        <span>API key</span>
-                        <input class="form-input" name="apiKey" type="text" autocomplete="off"
-                               spellcheck="false" required
-                               placeholder="AIza…">
                     </label>
                     <div class="playbill-youtube-actions">
                         <button type="submit" class="playbill-btn playbill-btn-primary"
@@ -222,14 +219,10 @@ export const youtubeTab = {
         const value = {
             clientId:     String(data.get('clientId')     || '').trim(),
             clientSecret: String(data.get('clientSecret') || '').trim(),
-            apiKey:       String(data.get('apiKey')       || '').trim(),
         };
         // Sanity-check shape locally before round-tripping to the controller.
         if (!value.clientId.endsWith('.apps.googleusercontent.com')) {
             return this._showError('Client ID should end with .apps.googleusercontent.com — double-check you copied the whole value.');
-        }
-        if (!value.apiKey.startsWith('AIza')) {
-            return this._showError('API key should start with AIza — that’s the Cloud Console format.');
         }
         this._setBusy('playbill-youtube-save', 'Saving…');
         try {

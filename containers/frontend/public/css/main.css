@@ -5047,3 +5047,514 @@ input[type="range"] {
     .playbill-youtube-code { font-size: 36px; letter-spacing: 0.14em; }
     .playbill-youtube-card { padding: 16px; }
 }
+
+/* ─── Peregrine chat page ──────────────────────────────────────────────── */
+
+/* The chat surface needs the textarea pinned to the bottom of the viewport
+   with only the message log scrolling. Position: fixed pulls the page out
+   of main-content's padded flow entirely — otherwise the page's height
+   plus main-content's 80/100px top/bottom padding overflows the viewport
+   and the *body* scrolls instead of the log. Sized to fill the strip
+   between the fixed header (60px) and the fixed bottom-nav (80px). */
+.page-peregrine {
+    position: fixed;
+    top: 60px;
+    bottom: 80px;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    margin: 0;
+    background: var(--bg-primary);
+    z-index: 10;
+}
+
+.peregrine-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 20px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+    flex: 0 0 auto;
+}
+
+.peregrine-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.peregrine-title h1 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: 0.02em;
+}
+
+.peregrine-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: var(--glow-primary);
+    flex: 0 0 10px;
+}
+
+.peregrine-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.peregrine-icon-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.peregrine-icon-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.peregrine-icon-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--primary);
+}
+
+/* Settings panel (collapsible) */
+.peregrine-settings-panel {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+    padding: 14px 20px;
+    flex: 0 0 auto;
+}
+
+.peregrine-settings-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.peregrine-settings-description {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin: 0 0 10px;
+    line-height: 1.4;
+}
+
+.peregrine-settings-description code {
+    background: var(--bg-secondary);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85em;
+}
+
+.peregrine-settings-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.peregrine-url-input {
+    flex: 1;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 0.9rem;
+    min-width: 0;
+}
+
+.peregrine-url-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.peregrine-save-btn {
+    background: var(--primary);
+    color: var(--btn-text);
+    border: none;
+    border-radius: 8px;
+    padding: 9px 16px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.peregrine-save-btn:hover {
+    background: var(--primary-hover);
+}
+
+.peregrine-settings-msg {
+    font-size: 0.8rem;
+    margin-top: 8px;
+}
+
+.peregrine-settings-msg-success { color: var(--primary); }
+.peregrine-settings-msg-error   { color: var(--danger); }
+
+/* Scrolling chat log */
+.peregrine-log {
+    flex: 1 1 0;
+    /* `min-height: 0` is critical: without it, flex items default to a
+       content-derived minimum height, so a long log pushes the form out
+       of view instead of scrolling. */
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 820px;
+    margin: 0 auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.peregrine-msg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 92%;
+}
+
+.peregrine-msg-user {
+    align-self: flex-end;
+    align-items: flex-end;
+}
+
+.peregrine-msg-assistant,
+.peregrine-msg-error {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.peregrine-who {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    padding: 0 4px;
+}
+
+.peregrine-bubble {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+    white-space: pre-wrap;
+}
+
+.peregrine-msg-assistant .peregrine-bubble {
+    white-space: normal;
+    border-bottom-left-radius: 4px;
+}
+
+.peregrine-msg-user .peregrine-bubble {
+    background: var(--primary);
+    color: var(--btn-text);
+    border-color: var(--primary);
+    border-bottom-right-radius: 4px;
+}
+
+.peregrine-msg-error .peregrine-bubble {
+    color: var(--danger);
+    border-color: var(--danger);
+    background: var(--danger-bg-subtle);
+}
+
+/* Streaming cursor */
+.peregrine-msg.streaming .peregrine-bubble::after {
+    content: "▊";
+    color: var(--primary);
+    animation: peregrine-blink 1s steps(2) infinite;
+    margin-left: 2px;
+}
+
+@keyframes peregrine-blink {
+    50% { opacity: 0; }
+}
+
+/* Markdown inside assistant bubbles */
+.peregrine-bubble p { margin: 6px 0; }
+.peregrine-bubble p:first-child { margin-top: 0; }
+.peregrine-bubble p:last-child  { margin-bottom: 0; }
+.peregrine-bubble h1,
+.peregrine-bubble h2,
+.peregrine-bubble h3,
+.peregrine-bubble h4 {
+    margin: 12px 0 6px;
+    line-height: 1.3;
+    color: var(--text-primary);
+}
+.peregrine-bubble h1 { font-size: 1.15rem; }
+.peregrine-bubble h2 { font-size: 1.05rem; }
+.peregrine-bubble h3,
+.peregrine-bubble h4 { font-size: 0.95rem; }
+.peregrine-bubble ul,
+.peregrine-bubble ol { margin: 6px 0; padding-left: 22px; }
+.peregrine-bubble li { margin: 2px 0; }
+.peregrine-bubble a { color: var(--primary); }
+
+/* Inline code */
+.peregrine-inline-code {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* Fenced code blocks */
+.peregrine-codeblock {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin: 8px 0;
+    overflow: hidden;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    max-width: 100%;
+}
+
+.peregrine-codeblock .codehead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+    padding: 4px 8px 4px 12px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.peregrine-codeblock .lang {
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.peregrine-codeblock .copy {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    font-family: inherit;
+    flex: 0 0 auto;
+    min-height: 26px;
+}
+
+.peregrine-codeblock .copy:hover,
+.peregrine-codeblock .copy:active {
+    color: var(--text-primary);
+    border-color: var(--primary);
+}
+
+.peregrine-codeblock .copy.copied {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
+.peregrine-codeblock code {
+    display: block;
+    padding: 10px 12px;
+    white-space: pre;
+    overflow-x: auto;
+    line-height: 1.5;
+    color: var(--text-primary);
+    -webkit-overflow-scrolling: touch;
+    font-family: inherit;
+}
+
+/* User-message bubble overrides for code (so it stays readable on green) */
+.peregrine-msg-user .peregrine-inline-code {
+    background: rgba(0, 0, 0, 0.18);
+    border-color: rgba(0, 0, 0, 0.25);
+    color: inherit;
+}
+
+/* Compose form pinned at the bottom */
+.peregrine-form {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    padding: 12px 20px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border-color);
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 820px;
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+
+.peregrine-input {
+    flex: 1;
+    min-width: 0;
+    resize: none;
+    min-height: 44px;
+    max-height: 40vh;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 16px;   /* prevent iOS Safari zoom-on-focus */
+    line-height: 1.45;
+}
+
+.peregrine-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.peregrine-send-btn {
+    background: var(--primary);
+    color: var(--btn-text);
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.peregrine-send-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.peregrine-send-btn:hover {
+    background: var(--primary-hover);
+}
+
+.peregrine-send-btn:disabled {
+    background: var(--gray-400);
+    cursor: not-allowed;
+}
+
+@media (min-width: 700px) {
+    .peregrine-header { padding: 14px 24px; }
+    .peregrine-log { padding: 20px 24px; gap: 14px; }
+    .peregrine-msg { max-width: 80%; }
+    .peregrine-form { padding: 14px 24px; gap: 10px; }
+}
+
+/* Status strip under the chat header */
+.peregrine-status-bar {
+    padding: 8px 20px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    flex: 0 0 auto;
+}
+
+.peregrine-status-bar:empty { display: none; }
+.peregrine-status-bar code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--bg-card);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--text-primary);
+}
+.peregrine-status-bar a { color: var(--primary); }
+.peregrine-status-bar[data-state="warn"] {
+    color: var(--warning);
+    background: var(--warning-bg-subtle);
+    border-bottom-color: var(--warning);
+}
+
+/* Peregrine settings card */
+.peregrine-ca-status {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 8px 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.peregrine-ca-installed {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.peregrine-ca-badge {
+    display: inline-block;
+    background: var(--primary);
+    color: var(--btn-text);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 4px;
+    align-self: flex-start;
+    margin-bottom: 4px;
+}
+
+.peregrine-ca-detail {
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+
+.peregrine-ca-detail code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.95em;
+    color: var(--text-primary);
+}
+
+.peregrine-ca-empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.peregrine-ca-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 4px;
+}

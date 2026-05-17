@@ -3,6 +3,15 @@ import { API, wsClient } from '../api.js';
 
 let settings = null;
 let systemConfig = null;
+let peregrineConfig = null;
+
+function escapeHtmlSettings(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
 
 export const settingsPage = {
     render() {
@@ -199,6 +208,43 @@ export const settingsPage = {
                 </div>
             </div>
 
+            <!-- Peregrine -->
+            <div class="card settings-item-vertical">
+                <div class="settings-item-header">
+                    <span class="settings-label">Peregrine</span>
+                    <p class="settings-description">Connect to a Peregrine board on the LAN for on-device voice / chat assistance. The backend proxies chat requests, so the Peregrine CA only needs to be installed here — phones and browsers don't need to trust it themselves.</p>
+                </div>
+                <div class="cloud-config-container">
+                    <div class="cloud-config-field">
+                        <label class="password-label" for="settings-peregrine-url">Peregrine URL</label>
+                        <input type="url" id="settings-peregrine-url" class="password-input"
+                               placeholder="https://peregrine.local"
+                               value="">
+                    </div>
+                    <div class="cloud-config-field">
+                        <label class="password-label" for="settings-peregrine-ca-file">CA Certificate</label>
+                        <p class="settings-description" style="margin-top: 0;">Upload the Peregrine CA (download from <code>http://peregrine.local/ca.pem</code>). Once installed, the backend container trusts the board's self-signed cert.</p>
+                        <div id="peregrine-ca-status" class="peregrine-ca-status">Loading…</div>
+                        <div class="peregrine-ca-actions">
+                            <input type="file" id="settings-peregrine-ca-file"
+                                   accept=".pem,.crt,.cer,application/x-pem-file,application/x-x509-ca-cert,text/plain"
+                                   style="display: none;">
+                            <button class="password-submit-btn" id="peregrine-upload-ca-btn" type="button">
+                                Upload Certificate…
+                            </button>
+                            <button class="settings-action-btn settings-action-btn-danger"
+                                    id="peregrine-remove-ca-btn" type="button" style="display: none;">
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                    <div id="peregrine-config-message" class="password-message hidden"></div>
+                    <button class="password-submit-btn" id="save-peregrine-config-btn">
+                        Save Peregrine Settings
+                    </button>
+                </div>
+            </div>
+
             <!-- CA Certificate -->
             <div class="card settings-item-vertical">
                 <div class="settings-item-header">
@@ -293,19 +339,103 @@ export const settingsPage = {
 
     async init() {
         try {
-            const [data, sysConfig] = await Promise.all([
+            const [data, sysConfig, peregrineCfg] = await Promise.all([
                 API.getSettings(),
-                API.getSystemConfig()
+                API.getSystemConfig(),
+                API.getPeregrineConfig().catch(err => {
+                    console.warn('Peregrine config load failed:', err);
+                    return null;
+                })
             ]);
             settings = data;
             systemConfig = sysConfig;
+            peregrineConfig = peregrineCfg;
 
             document.getElementById('settings-container').innerHTML = this.renderSettings();
             this.setupListeners();
             this.setupSystemStats();
+            this.initPeregrineCard();
         } catch (error) {
             console.error('Failed to fetch settings:', error);
             document.getElementById('settings-container').innerHTML = '<p style="color: var(--danger);">Failed to load settings</p>';
+        }
+    },
+
+    initPeregrineCard() {
+        const urlInput = document.getElementById('settings-peregrine-url');
+        if (urlInput && peregrineConfig) {
+            urlInput.value = peregrineConfig.peregrine_url || 'https://peregrine.local';
+        } else if (urlInput) {
+            urlInput.value = 'https://peregrine.local';
+        }
+        this.renderPeregrineCaStatus();
+    },
+
+    renderPeregrineCaStatus() {
+        const statusEl = document.getElementById('peregrine-ca-status');
+        const removeBtn = document.getElementById('peregrine-remove-ca-btn');
+        if (!statusEl) return;
+        const ca = peregrineConfig && peregrineConfig.ca_status;
+        if (ca && ca.installed) {
+            const subject = ca.subject || '(unknown subject)';
+            const fp = ca.fingerprint ? ca.fingerprint.replace(/:/g, '').slice(0, 16) + '…' : '';
+            const validTo = ca.valid_to ? new Date(ca.valid_to).toLocaleDateString() : '';
+            statusEl.innerHTML = `
+                <div class="peregrine-ca-installed">
+                    <span class="peregrine-ca-badge">Installed</span>
+                    <div class="peregrine-ca-detail"><strong>Subject:</strong> ${escapeHtmlSettings(subject)}</div>
+                    ${fp ? `<div class="peregrine-ca-detail"><strong>SHA-256:</strong> <code>${fp}</code></div>` : ''}
+                    ${validTo ? `<div class="peregrine-ca-detail"><strong>Expires:</strong> ${escapeHtmlSettings(validTo)}</div>` : ''}
+                </div>
+            `;
+            if (removeBtn) removeBtn.style.display = '';
+        } else {
+            statusEl.innerHTML = `<div class="peregrine-ca-detail peregrine-ca-empty">No CA installed — Peregrine's self-signed cert won't be trusted by the backend.</div>`;
+            if (removeBtn) removeBtn.style.display = 'none';
+        }
+    },
+
+    showPeregrineMsg(text, type) {
+        const msg = document.getElementById('peregrine-config-message');
+        if (!msg) return;
+        msg.textContent = text;
+        msg.className = 'password-message ' + (type === 'error' ? 'error' : 'success');
+        msg.classList.remove('hidden');
+    },
+
+    async handleSavePeregrineConfig() {
+        const urlInput = document.getElementById('settings-peregrine-url');
+        const url = (urlInput?.value || '').trim();
+        try {
+            peregrineConfig = await API.setPeregrineConfig({ peregrine_url: url });
+            this.showPeregrineMsg('Saved.', 'success');
+            this.renderPeregrineCaStatus();
+        } catch (err) {
+            this.showPeregrineMsg(err.message || 'Save failed', 'error');
+        }
+    },
+
+    async handleUploadPeregrineCa(file) {
+        try {
+            const text = await file.text();
+            const result = await API.installPeregrineCa(text);
+            peregrineConfig = { ...(peregrineConfig || {}), ca_status: result.ca_status };
+            this.renderPeregrineCaStatus();
+            this.showPeregrineMsg('Certificate installed and trusted.', 'success');
+        } catch (err) {
+            this.showPeregrineMsg(err.message || 'Install failed', 'error');
+        }
+    },
+
+    async handleRemovePeregrineCa() {
+        if (!confirm('Remove the Peregrine CA from the system trust store?')) return;
+        try {
+            const result = await API.removePeregrineCa();
+            peregrineConfig = { ...(peregrineConfig || {}), ca_status: result.ca_status };
+            this.renderPeregrineCaStatus();
+            this.showPeregrineMsg('Certificate removed.', 'success');
+        } catch (err) {
+            this.showPeregrineMsg(err.message || 'Remove failed', 'error');
         }
     },
 
@@ -376,6 +506,35 @@ export const settingsPage = {
             });
         }
 
+        // Peregrine: save URL
+        const savePeregrineBtn = document.getElementById('save-peregrine-config-btn');
+        if (savePeregrineBtn) {
+            savePeregrineBtn.addEventListener('click', async () => {
+                await this.handleSavePeregrineConfig();
+            });
+        }
+
+        // Peregrine: upload CA — file picker
+        const peregrineUploadBtn = document.getElementById('peregrine-upload-ca-btn');
+        const peregrineFileInput = document.getElementById('settings-peregrine-ca-file');
+        if (peregrineUploadBtn && peregrineFileInput) {
+            peregrineUploadBtn.addEventListener('click', () => peregrineFileInput.click());
+            peregrineFileInput.addEventListener('change', async () => {
+                const file = peregrineFileInput.files && peregrineFileInput.files[0];
+                if (!file) return;
+                await this.handleUploadPeregrineCa(file);
+                peregrineFileInput.value = '';  // allow re-selecting the same file
+            });
+        }
+
+        // Peregrine: remove CA
+        const peregrineRemoveBtn = document.getElementById('peregrine-remove-ca-btn');
+        if (peregrineRemoveBtn) {
+            peregrineRemoveBtn.addEventListener('click', async () => {
+                await this.handleRemovePeregrineCa();
+            });
+        }
+
         // Change password form
         const passwordForm = document.getElementById('change-password-form');
         if (passwordForm) {
@@ -423,9 +582,15 @@ export const settingsPage = {
                 `;
 
                 try {
-                    // Tell any waiting service worker to activate immediately
-                    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                        navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+                    // Tell the waiting (new) SW to activate. controller is the
+                    // currently-active old SW — messaging it is a no-op.
+                    if ('serviceWorker' in navigator) {
+                        const registrations = await navigator.serviceWorker.getRegistrations();
+                        for (const reg of registrations) {
+                            if (reg.waiting) {
+                                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                            }
+                        }
                     }
 
                     // Clear all caches
@@ -440,11 +605,12 @@ export const settingsPage = {
                         await Promise.all(registrations.map(r => r.unregister()));
                     }
 
-                    // Wait for unregistration to take effect, then hard reload
-                    // The delay is needed in standalone PWA mode where unregister
-                    // is asynchronous and the old worker can still intercept fetches
+                    // Wait for unregistration to take effect, then hard reload.
+                    // In iOS standalone, location.replace(same path) can be intercepted
+                    // as an in-app navigation that keeps the old JS heap alive — a
+                    // unique query string forces a fresh document load.
                     await new Promise(resolve => setTimeout(resolve, 1000));
-                    window.location.replace(window.location.pathname);
+                    window.location.href = `${window.location.pathname}?_=${Date.now()}`;
                 } catch (error) {
                     console.error('Failed to refresh app:', error);
                     refreshBtn.disabled = false;

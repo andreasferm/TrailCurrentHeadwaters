@@ -215,6 +215,29 @@ class API {
         return this.request('/settings/ca-certificate');
     }
 
+    // Peregrine
+    static async getPeregrineConfig() {
+        return this.request('/peregrine/config');
+    }
+
+    static async setPeregrineConfig(data) {
+        return this.request('/peregrine/config', {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        });
+    }
+
+    static async installPeregrineCa(pem) {
+        return this.request('/peregrine/ca', {
+            method: 'POST',
+            body: JSON.stringify({ certificate: pem })
+        });
+    }
+
+    static async removePeregrineCa() {
+        return this.request('/peregrine/ca', { method: 'DELETE' });
+    }
+
     // System Stats (CPU temp, utilization, fan speed)
     static async getSystemStats() {
         return this.request('/system-stats');

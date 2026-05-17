@@ -26,6 +26,7 @@ const discoveryRoutes = require('./routes/discovery');
 const systemStatsRoutes = require('./routes/system-stats');
 const deploymentsRoutes = require('./routes/deployments');
 const playbillRoutes = require('./routes/playbill');
+const peregrineRoutes = require('./routes/peregrine');
 
 const app = express();
 const server = http.createServer(app);
@@ -76,6 +77,7 @@ async function startServer() {
         app.use('/api/system-stats', systemStatsRoutes());
         app.use('/api/deployments', deploymentsRoutes(db));
         app.use('/api/playbill', playbillRoutes());
+        app.use('/api/peregrine', peregrineRoutes(db));
 
         // Error handling middleware
         app.use((err, req, res, next) => {
@@ -99,6 +101,12 @@ async function startServer() {
 
         // Make broadcast available to routes if needed
         app.set('broadcast', broadcast);
+
+        // Reinstall any saved Peregrine CA into the system trust store.
+        // Best-effort: a failure here is logged but doesn't block startup.
+        const peregrineCa = require('./services/peregrine-ca');
+        peregrineCa.reinstallFromDb(db).catch(err =>
+            console.error('[Startup] Peregrine CA reinstall failed:', err.message));
 
         // Initialize MQTT service
         mqttService.connect(db, broadcast);

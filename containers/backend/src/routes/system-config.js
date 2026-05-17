@@ -95,6 +95,9 @@ module.exports = (db) => {
             delete data.cloud_api_key_iv;
             delete data.sms_ssh_key_encrypted;
             delete data.sms_ssh_key_iv;
+            // Peregrine CA PEM is managed by /api/peregrine and is large —
+            // strip it from this generic blob.
+            delete data.peregrine_ca_pem;
 
             res.json(data);
         } catch (error) {
@@ -501,6 +504,9 @@ module.exports = (db) => {
             delete data.cloud_api_key_iv;
             delete data.sms_ssh_key_encrypted;
             delete data.sms_ssh_key_iv;
+            // Peregrine CA PEM is managed by /api/peregrine and is large —
+            // strip it from this generic blob.
+            delete data.peregrine_ca_pem;
 
             res.json(data);
         } catch (error) {
