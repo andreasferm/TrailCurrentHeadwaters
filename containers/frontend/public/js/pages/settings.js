@@ -472,12 +472,25 @@ export const settingsPage = {
         // SMS enabled toggle
         const smsEnabledToggle = document.getElementById('sms-enabled-toggle');
         if (smsEnabledToggle) {
-            smsEnabledToggle.addEventListener('click', () => {
+            smsEnabledToggle.addEventListener('click', async () => {
                 const isEnabled = smsEnabledToggle.classList.toggle('active');
                 smsEnabledToggle.setAttribute('aria-pressed', isEnabled);
                 const smsFields = document.getElementById('sms-config-fields');
                 if (smsFields) {
                     smsFields.classList.toggle('hidden', !isEnabled);
+                }
+                // Persist immediately when disabling — the Save button is hidden
+                // with the config fields, so there's no other way to commit the change.
+                if (!isEnabled) {
+                    try {
+                        systemConfig = await API.updateSystemConfig({ sms_enabled: false });
+                        this.showSmsConfigMessage('SMS disabled', 'success');
+                    } catch (error) {
+                        smsEnabledToggle.classList.add('active');
+                        smsEnabledToggle.setAttribute('aria-pressed', true);
+                        if (smsFields) smsFields.classList.remove('hidden');
+                        this.showSmsConfigMessage(error.message || 'Failed to disable SMS', 'error');
+                    }
                 }
             });
         }
