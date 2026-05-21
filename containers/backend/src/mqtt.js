@@ -79,6 +79,12 @@ const TOPICS = {
     PLAYBILL_STATUS_ALL: `${MQTT_ROOT}/${MQTT_PLAYBILL}/+/+/${MSG_STATUS}`,
 };
 
+// Gated logger for high-frequency per-CAN-frame handlers. These fire many
+// times per second (8 lights × 1Hz, GPS 1Hz, etc.) and saturated the backend
+// event loop on Headwaters. Set LOG_LEVEL=debug to re-enable them.
+const DEBUG_LOG = process.env.LOG_LEVEL === 'debug';
+const debugLog = DEBUG_LOG ? console.log.bind(console) : () => {};
+
 class MqttService {
     constructor() {
         this.client = null;
@@ -456,7 +462,7 @@ class MqttService {
 
     // Handle light status update from light controller
     async handleLightStatus(lightId, payload) {
-        console.log(`Received light status for light ${lightId}:`, payload);
+        debugLog(`Received light status for light ${lightId}:`, payload);
 
         // Broadcast light status data via WebSocket, including name from DB
         if (this.broadcast) {
@@ -486,7 +492,7 @@ class MqttService {
 
     // Handle light command from external source (e.g. voice assistant via MQTT)
     async handleLightCommand(lightId, payload) {
-        console.log(`Received light command for light ${lightId}:`, payload);
+        debugLog(`Received light command for light ${lightId}:`, payload);
 
         if (!this.db) {
             console.warn('DB not available, cannot route light command');
@@ -697,7 +703,7 @@ class MqttService {
     }
 
     async handleAirQualityTempAndHumdity(payload) {
-        console.log('Received air quality temp and humidity', payload);
+        debugLog('Received air quality temp and humidity', payload);
         this.broadcast('temphumid', payload);
     }
 
@@ -710,7 +716,7 @@ class MqttService {
 
     // Handle GPS lat/lon update from GPS module
     handleGpsStatus(payload) {
-        console.log('Received GPS lat/lon:', payload);
+        debugLog('Received GPS lat/lon:', payload);
 
         // Broadcast GPS data directly via WebSocket (no database storage needed)
         if (this.broadcast) {
@@ -723,7 +729,7 @@ class MqttService {
 
     // Handle GPS altitude update from GPS module
     handleGpsAlt(payload) {
-        console.log('Received GPS altitude:', payload);
+        debugLog('Received GPS altitude:', payload);
 
         // Broadcast GPS data directly via WebSocket (no database storage needed)
         if (this.broadcast) {
@@ -736,7 +742,7 @@ class MqttService {
 
     // Handle GPS time update from GNSS module
     handleGpsTime(payload) {
-        console.log('Received GPS time:', payload);
+        debugLog('Received GPS time:', payload);
 
         if (this.broadcast) {
             this.broadcast('gps_time', {
@@ -752,7 +758,7 @@ class MqttService {
 
     // Handle GPS details update from GPS module
     handleGpsDetails(payload) {
-        console.log('Received GPS details:', payload);
+        debugLog('Received GPS details:', payload);
 
         // Broadcast GPS data directly via WebSocket (no database storage needed)
         if (this.broadcast) {
@@ -767,7 +773,7 @@ class MqttService {
 
     // Handle thermostat status update from HVAC controller
     handleThermostatStatus(payload) {
-        console.log('Received thermostat status:', payload);
+        debugLog('Received thermostat status:', payload);
 
         // Broadcast thermostat data directly via WebSocket (no database storage)
         if (this.broadcast) {
@@ -914,7 +920,7 @@ class MqttService {
         }
 
         const topic = `${MQTT_ROOT}/${MQTT_LIGHTS}/${lightId}/${MSG_STATUS}`;
-        console.log(`Publishing light status to ${topic}:`, payload);
+        debugLog(`Publishing light status to ${topic}:`, payload);
         this.client.publish(topic, JSON.stringify(payload), { qos: 1 });
         return true;
     }
@@ -952,7 +958,7 @@ class MqttService {
             self: 0
         };
 
-        console.log(`Publishing CAN message to ${topic}:`, payload);
+        debugLog(`Publishing CAN message to ${topic}:`, payload);
         this.client.publish(topic, JSON.stringify(payload), { qos: 1 });
         return true;
     }
