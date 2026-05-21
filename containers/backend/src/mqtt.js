@@ -91,7 +91,7 @@ class MqttService {
         this.db = null;
         this.broadcast = null;
         this.connected = false;
-        this.relayNameCache = {};  // lightId → name, refreshed on sync
+        this.lightNameCache = {};  // lightId → name (PDM + Switchback). Refreshed on startup and on config edits — NEVER on a CAN-frame hot path.
         this.lightStateCache = {};  // lightId → last known state from CAN bus
         // Global SMS throttle — sliding window of recent send timestamps
         this.smsSentTimestamps = [];
@@ -464,17 +464,13 @@ class MqttService {
     async handleLightStatus(lightId, payload) {
         debugLog(`Received light status for light ${lightId}:`, payload);
 
-        // Broadcast light status data via WebSocket, including name from DB
+        // Broadcast light status data via WebSocket. Name is pulled from the
+        // in-memory cache — populated at startup and refreshed when the user
+        // edits the configuration screen — so we do zero Mongo I/O per frame.
         if (this.broadcast) {
             const lightData = { "id": lightId, "_id": lightId, "state": payload.state, "brightness": payload.brightness };
-            try {
-                const light = await this.db.collection('lights').findOne({ _id: lightId });
-                if (light && light.name) {
-                    lightData.name = light.name;
-                }
-            } catch (err) {
-                // Non-fatal — broadcast without name
-            }
+            const name = this.lightNameCache[lightId];
+            if (name) lightData.name = name;
             this.broadcast('light', lightData);
         }
 
@@ -573,8 +569,8 @@ class MqttService {
 
         if (this.broadcast) {
             const relayData = { id: lightId, _id: lightId, state: payload.state };
-            if (this.relayNameCache[lightId]) {
-                relayData.name = this.relayNameCache[lightId];
+            if (this.lightNameCache[lightId]) {
+                relayData.name = this.lightNameCache[lightId];
             }
             this.broadcast('light', relayData);
         }
@@ -657,15 +653,18 @@ class MqttService {
         }
     }
 
-    // Refresh relay name cache from DB — called after switchback channel sync
-    async refreshRelayNameCache() {
+    // Refresh light name cache from DB. Called once at startup and after any
+    // configuration edit that can rename or add/remove lights (system-config
+    // save, discovery sync, MQTT config-request). NEVER called per CAN frame.
+    async refreshLightNameCache() {
         try {
-            const relays = await this.db.collection('lights').find({ source: 'switchback' }).toArray();
-            this.relayNameCache = {};
-            for (const r of relays) {
-                this.relayNameCache[r._id] = r.name;
+            const all = await this.db.collection('lights').find({}, { projection: { _id: 1, name: 1 } }).toArray();
+            const next = {};
+            for (const l of all) {
+                if (l.name) next[l._id] = l.name;
             }
-            console.log(`[MQTT] Cached ${relays.length} relay names`);
+            this.lightNameCache = next;
+            console.log(`[MQTT] Cached ${all.length} light names`);
         } catch (err) {
             console.error('[MQTT] Failed to refresh relay name cache:', err.message);
         }
@@ -1146,6 +1145,7 @@ class MqttService {
             const { syncSwitchbackChannelsToLights } = require('./services/switchback-channel-sync');
             await syncPdmChannelsToLights(this.db, this);
             await syncSwitchbackChannelsToLights(this.db, this);
+            await this.refreshLightNameCache();
         } catch (err) {
             console.error('[Config Request] Failed to re-publish config:', err.message);
         }

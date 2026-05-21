@@ -144,7 +144,7 @@ async function startServer() {
         // then publish config snapshot to cloud if enabled
         const { syncSwitchbackChannelsToLights } = require('./services/switchback-channel-sync');
         syncSwitchbackChannelsToLights(db, mqttService)
-            .then(() => mqttService.refreshRelayNameCache())
+            .then(() => mqttService.refreshLightNameCache())
             .then(async () => {
                 if (sysConfig && sysConfig.cloud_enabled) {
                     const { buildConfigSnapshot } = require('./services/config-snapshot');

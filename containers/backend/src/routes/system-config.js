@@ -419,7 +419,7 @@ module.exports = (db) => {
                 try {
                     await syncPdmChannelsToLights(db, mqttService);
                     await syncSwitchbackChannelsToLights(db, mqttService);
-                    await mqttService.refreshRelayNameCache();
+                    await mqttService.refreshLightNameCache();
                     // Broadcast updated light names to all WebSocket clients immediately
                     const broadcast = req.app.get('broadcast');
                     if (broadcast) {

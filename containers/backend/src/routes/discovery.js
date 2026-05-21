@@ -345,12 +345,17 @@ module.exports = (db) => {
 
             // Trigger channel sync for relevant module types
             try {
+                let syncedAny = false;
                 if (found.type === 'torrent') {
                     await syncPdmChannelsToLights(db, mqttService);
+                    syncedAny = true;
                 }
                 if (found.type === 'switchback' || found.type === 'switchback_relay') {
                     await syncSwitchbackChannelsToLights(db, mqttService);
-                    await mqttService.refreshRelayNameCache();
+                    syncedAny = true;
+                }
+                if (syncedAny) {
+                    await mqttService.refreshLightNameCache();
                 }
             } catch (syncErr) {
                 console.error('[Discovery] Channel sync error:', syncErr.message);
