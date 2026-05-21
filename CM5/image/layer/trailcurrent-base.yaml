@@ -70,9 +70,6 @@ mmdebstrap:
       dtparam=act_led_activelow=off
       gpu_mem=16
 
-      # ── Underclock to 600 MHz (ample for Mosquitto/MongoDB/backend workload) ──
-      arm_freq=600
-
       # ── I2C (required for Waveshare CM5 active cooler fan controller) ──
       dtparam=i2c_arm=on
 
@@ -132,6 +129,29 @@ mmdebstrap:
       Type=oneshot
       RemainAfterExit=yes
       ExecStart=/bin/bash -c 'for port in /sys/bus/usb/devices/[0-9]-[0-9]; do [ -e "$port/driver" ] && echo "$(basename $port)" > /sys/bus/usb/drivers/usb/unbind || true; done'
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+    # ── cpu-performance systemd service ──────────────────────────────
+    # Locks all CPU cores to the 'performance' governor (max frequency)
+    # at boot and keeps them there. The default 'ondemand' governor was
+    # capping cores at ~1.0–1.1 GHz under sustained CAN/MQTT workload,
+    # adding wake-up latency to bursty real-time work. With this service
+    # the four CM5 cores run at the stock 1.5 GHz ceiling constantly.
+    # In a vehicle gateway the modest extra idle power is irrelevant —
+    # the device is always on alternator/battery.
+    - |
+      cat > "$1/etc/systemd/system/cpu-performance.service" << 'EOF'
+      [Unit]
+      Description=Lock CPU frequency governor to 'performance'
+      After=multi-user.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/sh -c 'for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "$f"; done'
 
       [Install]
       WantedBy=multi-user.target
@@ -370,7 +390,7 @@ mmdebstrap:
     - install -m 644 "$SRCROOT/layer/files/motd" "$1/etc/motd"
 
     # ── Enable all services ──────────────────────────────────────────
-    - $BDEBSTRAP_HOOKS/enable-units "$1" can0 disable-usb docker trailcurrent-firstboot trailcurrent-load-images cantomqtt discovery-mdns deployment-watcher chrony time-from-bearing
+    - $BDEBSTRAP_HOOKS/enable-units "$1" can0 disable-usb cpu-performance docker trailcurrent-firstboot trailcurrent-load-images cantomqtt discovery-mdns deployment-watcher chrony time-from-bearing
 
     # ── Add default user to docker group ─────────────────────────────
     - chroot "$1" usermod -aG docker "$IGconf_device_user1"
