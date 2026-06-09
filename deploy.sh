@@ -345,17 +345,24 @@ fi
 echo "  Waiting for CAN-to-MQTT bridge to initialize..."
 sleep 5
 
-# Step 6.1: Install/restart deployment watcher service
+# Step 6.1: Install (or stage update of) the deployment watcher service.
+# We deliberately do NOT restart an already-running watcher here. When this
+# script is invoked by the watcher itself (cloud or PWA deploy), the watcher
+# is our parent process and `systemctl restart` would cgroup-SIGTERM us
+# before Step 7 (firmware OTA) runs. The actual restart is deferred to the
+# end of deploy.sh via systemd-run, so the new code takes effect only after
+# this run completes cleanly.
 echo ""
 echo "Step 6.1: Setting up deployment watcher service..."
+if [ -f "local_code/deployment-watcher.service" ]; then
+    sudo cp local_code/deployment-watcher.service /etc/systemd/system/deployment-watcher.service
+    sudo systemctl daemon-reload
+fi
 if sudo systemctl is-active --quiet deployment-watcher.service 2>/dev/null || sudo systemctl is-enabled --quiet deployment-watcher.service 2>/dev/null; then
-    sudo systemctl restart deployment-watcher.service
-    echo "  deployment-watcher.service restarted"
+    echo "  deployment-watcher.service unit file refreshed (restart deferred to end of deploy)"
 else
     echo "  deployment-watcher.service not installed, installing..."
     if [ -f "local_code/deployment-watcher.service" ]; then
-        sudo cp local_code/deployment-watcher.service /etc/systemd/system/deployment-watcher.service
-        sudo systemctl daemon-reload
         sudo systemctl enable --now deployment-watcher.service
         echo "  deployment-watcher.service installed and started"
     else
@@ -532,3 +539,19 @@ echo "  View Python logs:  sudo journalctl -u cantomqtt.service -f"
 echo "  Restart services:  docker compose restart"
 echo "  Stop services:     docker compose down"
 echo ""
+
+# Step 8: Deferred deployment-watcher restart (paired with Step 6.1).
+# `systemd-run --no-block --on-active=2` schedules a one-shot transient unit
+# in its own cgroup so the restart fires ~2 seconds after deploy.sh exits.
+# This avoids the SIGTERM-our-own-parent loop that Step 6.1 used to cause.
+# Only runs if the watcher is currently active — if Step 6.1 just installed
+# it for the first time, `enable --now` already started fresh code.
+if sudo systemctl is-active --quiet deployment-watcher.service 2>/dev/null; then
+    echo "Scheduling deployment watcher restart (in 2s, after this script exits)..."
+    if sudo systemd-run --no-block --on-active=2 \
+            systemctl restart deployment-watcher.service 2>/dev/null; then
+        echo "  Deployment watcher restart scheduled"
+    else
+        echo "  WARNING: failed to schedule deferred watcher restart"
+    fi
+fi

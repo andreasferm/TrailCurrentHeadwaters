@@ -439,10 +439,7 @@ def extract_and_deploy(zip_path):
 
         proc.wait()
         log(f"deploy.sh exited with code {proc.returncode}")
-        # Exit code -15 means SIGTERM — deploy.sh restarts this service at
-        # Step 6.1, which sends SIGTERM to the running watcher (and its
-        # child deploy.sh). This is expected, not a failure.
-        return proc.returncode == 0 or proc.returncode == -15
+        return proc.returncode == 0
     except Exception as e:
         log(f"Error running deploy.sh: {e}")
         return False
