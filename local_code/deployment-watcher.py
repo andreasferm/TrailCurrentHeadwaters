@@ -524,9 +524,6 @@ def handle_deployment(payload):
         if os.path.isfile(zip_path):
             os.remove(zip_path)
 
-        # Note: deploy.sh restarts deployment-watcher at Step 6.1, so
-        # the code below typically never runs. The new watcher instance
-        # detects the pending file on startup and reports 'completed'.
         if success:
             failed_deployments.pop(deployment_id, None)
             set_last_deployed_id(deployment_id)
@@ -615,10 +612,15 @@ def handle_local_deployment(payload):
         report_local_status(deployment_id, 'deploying', version)
         success = extract_and_deploy(zip_path)
 
-        # Note: deploy.sh restarts deployment-watcher at Step 6.1, so the
-        # code below typically never runs. The new watcher instance detects
-        # the pending file on startup and reports 'completed'.
         if success:
+            # Remove the uploaded zip only after deploy.sh exited cleanly,
+            # so a failed deploy can be retried without re-uploading.
+            try:
+                if os.path.isfile(zip_path):
+                    os.remove(zip_path)
+                    log(f"Removed deployment zip {zip_path}")
+            except OSError as e:
+                log(f"Warning: could not remove {zip_path}: {e}")
             failed_deployments.pop(deployment_id, None)
             set_last_deployed_id(deployment_id)
             clear_pending_deployment()
