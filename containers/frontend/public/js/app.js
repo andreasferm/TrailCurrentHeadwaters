@@ -7,6 +7,7 @@ import { trailerPage } from './pages/trailer.js';
 import { energyPage } from './pages/energy.js';
 import { waterPage } from './pages/water.js';
 import { airqualityPage } from './pages/airquality.js';
+import { australisPage } from './pages/australis.js';
 import { settingsPage } from './pages/settings.js';
 import { loginPage } from './pages/login.js';
 import { mapPage } from './pages/map.js';
@@ -113,6 +114,7 @@ class App {
             .register('energy', energyPage)
             .register('water', waterPage)
             .register('airquality', airqualityPage)
+            .register('australis', australisPage)          // pushing in australis efter borealis
             .register('map', mapPage)
             .register('config', configPage)
             .register('deployments', deploymentsPage)
@@ -267,6 +269,13 @@ class App {
                     </svg>
                     <span>Air</span>
                 </button>
+                <button class="nav-btn nav-overflow-item" data-page="australis"> <!-- Australis -->
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+                <circle cx="9" cy="12" r="1.5"/>
+                </svg>
+                <span>Climate</span>
+                </button>
                 <button class="nav-btn nav-overflow-item" data-page="map">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
@@ -342,6 +351,13 @@ class App {
                                 <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"></path>
                             </svg>
                             <span>Air</span>
+                        </button>
+                        <button class="nav-overflow-btn" data-page="australis"> <!-- Australis -->
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+                        <circle cx="9" cy="12" r="1.5"/>
+                        </svg>
+                        <span>Climate</span>
                         </button>
                         <button class="nav-overflow-btn" data-page="map">
                             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
