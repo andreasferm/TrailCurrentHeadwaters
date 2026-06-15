@@ -1,6 +1,7 @@
 # TrailCurrent In-Vehicle Compute
 
 > [!CAUTION]
+> **Personal fork adapting to a new module [Australis](https://github.com/andreasferm/TrailCurrentAustralis) with the aim to monitor 1-8 enclosed rooms in a dogtrailer** This is definitely a work in progress
 > **The Radxa Dragon Q6A variant is a work in progress and is not recommended for use yet.** Further hardware and field testing is required before it should be considered shippable. Use the **CM5 build** for any real deployment.
 
 ![TrailCurrent Headwaters](DOCS/IMGS/headwaters_case.png)
