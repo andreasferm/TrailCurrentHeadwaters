@@ -184,8 +184,57 @@ const parsers = {
     '0x029': (data, mqtt) => parseRelayStatus(data, mqtt, '0x029'),
     '0x02a': (data, mqtt) => parseRelayStatus(data, mqtt, '0x02a'),
 
-    // ── Plateau tilt (0x030) ───────────────────────────────────────
+    // ── Australis multi-SCD41 sensor data (0x030) ──────────────────
     '0x030': (data, mqtt) => {
+        const decoded = decodeBitArrays(data);
+        const sensorIndex = decoded[0];
+        const tempC = decoded[1] > 127 ? decoded[1] - 256 : decoded[1];
+        const tempF = decoded[2] > 127 ? decoded[2] - 256 : decoded[2];
+        const humidity = ((decoded[3] << 8) | decoded[4]) / 100;
+        const co2 = (decoded[5] << 8) | decoded[6];
+        const sensorCount = decoded[7];
+
+        mqtt.publish('local/airquality/australis/temphumid', JSON.stringify({
+            sensorIndex,
+            tempInC: tempC,
+            tempInF: tempF,
+            humidity: parseFloat(humidity.toFixed(2)),
+            sensorCount
+            }));
+
+        mqtt.publish('local/airquality/australis/status', JSON.stringify({
+            sensorIndex,
+            co2_ppm: co2,
+            sensorCount
+            }));
+        },
+
+    // ── Australis CO2 alarm (0x031) — edge-triggered ───────────────
+    '0x031': (data, mqtt) => {
+        const decoded = decodeBitArrays(data);
+        const sensorIndex = decoded[0];
+        const alarmFlags = decoded[1];
+        const co2 = (decoded[2] << 8) | decoded[3];
+
+        mqtt.publish('local/airquality/australis/alarm', JSON.stringify({
+            sensorIndex,
+            active: (alarmFlags & 0x01) !== 0,
+            co2_ppm: co2
+            }));
+        },
+
+    // ── Water tank levels (0x03e) — Reservoir module ─────────────────
+    '0x03e': (data, mqtt) => {
+        const decoded = decodeBitArrays(data);
+        mqtt.publish('local/water/status', JSON.stringify({
+            fresh: decoded[0],
+            grey: decoded[1],
+            black: decoded[2]
+            }));
+        },
+
+    // ── Plateau tilt (0x037) ───────────────────────────────────────
+    '0x037': (data, mqtt) => {
         const decoded = decodeBitArrays(data);
         let pitch = (decoded[0] << 8) | decoded[1];
         if (pitch >= 0x8000) pitch -= 0x10000;
@@ -204,18 +253,8 @@ const parsers = {
         }));
     },
 
-    // ── Water tank levels (0x03e) — Reservoir module ─────────────────
-    '0x03e': (data, mqtt) => {
-        const decoded = decodeBitArrays(data);
-        mqtt.publish('local/water/status', JSON.stringify({
-            fresh: decoded[0],
-            grey: decoded[1],
-            black: decoded[2]
-        }));
-    },
-
-    // ── Plateau status (0x032) ─────────────────────────────────────
-    '0x032': (data, mqtt) => {
+    // ── Plateau status (0x039) ─────────────────────────────────────
+    '0x039': (data, mqtt) => {
         const decoded = decodeBitArrays(data);
         const flags = decoded[0];
         const calPacked = decoded[1];
