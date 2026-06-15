@@ -41,7 +41,7 @@ echo ""
 # ── 1. APT build dependencies ───────────────────────────────────────────────
 step "1. APT build dependencies"
 
-REQUIRED_TOOLS=(jsonnet bdebstrap guestfish qemu-aarch64-static sgdisk parted git curl gpg dtc rsync unzip nasm iasl pkg-config aarch64-linux-gnu-gcc)
+REQUIRED_TOOLS=(jsonnet bdebstrap guestfish qemu-aarch64 sgdisk parted git curl gpg dtc rsync unzip nasm iasl pkg-config aarch64-linux-gnu-gcc)
 MISSING_PKGS=()
 
 for tool in "${REQUIRED_TOOLS[@]}"; do
